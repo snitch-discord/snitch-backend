@@ -7,8 +7,8 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/untitled-discord-star-project/backend/pkg/ctxutil"
-	"github.com/untitled-discord-star-project/backend/pkg/trace"
+	"snitch/snitchbe/pkg/ctxutil"
+	"snitch/snitchbe/pkg/trace"
 
 	"github.com/google/uuid"
 )
