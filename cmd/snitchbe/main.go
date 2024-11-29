@@ -13,7 +13,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"snitch/snitchbe/assets"
@@ -103,7 +102,7 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 		panic(err)
 	}
 
-	libSQLHttpURL, err := libSqlConfig.HttpURL()
+	libSQLAdminURL, err := libSqlConfig.AdminURL()
 	if (err != nil) {
 		panic(err)
 	}
@@ -131,7 +130,7 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 			}
 
 			groupID := uuid.New()
-			requestURL := libSQLHttpURL.JoinPath(fmt.Sprintf("v1/namespaces/%s/create", groupID))
+			requestURL := libSQLAdminURL.JoinPath(fmt.Sprintf("v1/namespaces/%s/create", groupID))
 
 			request, err := http.NewRequestWithContext(r.Context(), "POST", requestURL.String(), nil)
 			if err != nil {
@@ -149,14 +148,13 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 				return
 			}
 
-			responseBodyString := new(strings.Builder)
-			_, err = io.Copy(responseBodyString, response.Body)
-			defer response.Body.Close()
-			if (err != nil) {
-				slogger.Error("Create String Buffer", "Error", err)
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+			if response.StatusCode >= 300 || response.StatusCode < 200 {
+				body, _ := io.ReadAll(response.Body)
+				defer response.Body.Close()
+				slogger.Error("Unexpected Response", "Status", response.Status, "StatusCode", response.StatusCode, "Body", string(body))
+				http.Error(w, "Unexpected Response, Status: " + response.Status, response.StatusCode)
+				return
 			}
-			slogger.InfoContext(r.Context(), "Response", "Body", responseBodyString)
 
 			newDatabaseURL.Host = fmt.Sprintf("%s.%s", groupID.String(), newDatabaseURL.Host)
 			slogger.Info("New URL", "URL", newDatabaseURL)

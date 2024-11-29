@@ -10,7 +10,7 @@ import (
 )
 
 type LibSQLConfig struct {
-	Host, Port, AuthKey string
+	Host, Port, AdminPort, AuthKey string
 }
 
 func LibSQLConfigFromEnv() (LibSQLConfig, error) {
@@ -27,6 +27,7 @@ func LibSQLConfigFromEnv() (LibSQLConfig, error) {
 	cfg := LibSQLConfig{
 		Host: get("LIBSQL_HOST"),
 		Port: get("LIBSQL_PORT"),
+		AdminPort: get("LIBSQL_ADMIN_PORT"),
 		AuthKey: get("LIBSQL_AUTH_KEY"),
 	}
 
@@ -40,6 +41,10 @@ func LibSQLConfigFromEnv() (LibSQLConfig, error) {
 
 func (libSQLConfig LibSQLConfig) HttpURL() (*url.URL, error) {
 	return url.Parse(fmt.Sprintf("http://%s:%s", libSQLConfig.Host, libSQLConfig.Port))
+}
+
+func (libSQLConfig LibSQLConfig) AdminURL() (*url.URL, error) {
+	return url.Parse(fmt.Sprintf("http://%s:%s", libSQLConfig.Host, libSQLConfig.AdminPort))
 }
 
 func (libSQLConfig LibSQLConfig) DatabaseURL(key ed25519.PrivateKey) (*url.URL, error) {
