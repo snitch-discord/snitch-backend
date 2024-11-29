@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/x509"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -13,6 +15,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 
 	"snitch/snitchbe/assets"
@@ -97,11 +100,6 @@ type registrationResponse struct {
 }
 
 func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlConfig dbconfig.LibSQLConfig, key ed25519.PrivateKey) http.HandlerFunc {
-	newDatabaseURL, err := libSqlConfig.DatabaseURL(key)
-	if (err != nil) {
-		panic(err)
-	}
-
 	libSQLAdminURL, err := libSqlConfig.AdminURL()
 	if (err != nil) {
 		panic(err)
@@ -132,7 +130,23 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 			groupID := uuid.New()
 			requestURL := libSQLAdminURL.JoinPath(fmt.Sprintf("v1/namespaces/%s/create", groupID))
 
-			request, err := http.NewRequestWithContext(r.Context(), "POST", requestURL.String(), nil)
+			dumpURL, err := url.Parse(fmt.Sprintf("http://%s.db.sarna.dev:8080", groupID.String())) // TODO: configure different domains for different environments. we can't use this in PROD
+			if (err != nil) {
+				slogger.ErrorContext(r.Context(), "Error Retrieving HTTP URL", "Error", err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			dumpURL.Host = fmt.Sprintf("%s.%s", groupID.String(), dumpURL.Host)
+
+			requestStruct := struct { DumpURL string `json:"dump_url"` }{ DumpURL: dumpURL.String()}
+			requestBody, err := json.Marshal(requestStruct)
+			if err != nil {
+				slog.ErrorContext(r.Context(), "JSON Marshalling", "Error", err)
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+
+			request, err := http.NewRequestWithContext(r.Context(), "POST", requestURL.String(), bytes.NewBuffer(requestBody))
 			if err != nil {
 				slogger.Error("Request Creation", "Error", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -140,6 +154,8 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 			}
 
 			request.Header.Add("Authorization", "Bearer " + tokenCache.Get())
+			request.Header.Add("Content-Type", "application/json")
+			request.Header.Add("Host", dumpURL.Hostname())
 			slogger.Info("DEBUG", "Header", request.Header)
 			response, err := httpClient.Do(request)
 			if err != nil {
@@ -156,10 +172,22 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 				return
 			}
 
-			newDatabaseURL.Host = fmt.Sprintf("%s.%s", groupID.String(), newDatabaseURL.Host)
-			slogger.Info("New URL", "URL", newDatabaseURL)
+			// newDatabaseURL, err := libSqlConfig.DatabaseURL(key)
+			// if (err != nil) {
+			// 	slogger.ErrorContext(r.Context(), "Error Retrieving DB URL", "Error", err)
+			// 	http.Error(w, err.Error(), http.StatusInternalServerError)
+			// 	return
+			// }
 
-			newDb, err := sql.Open("libsql", newDatabaseURL.String());
+			// newDatabaseURL.Host = fmt.Sprintf("%s.%s", groupID.String(), newDatabaseURL.Host)
+			// databaseURLWithPath := newDatabaseURL.JoinPath("dev/"+groupID.String())
+
+			// slogger.Info("New URL", "URL", databaseURLWithPath)
+			query := dumpURL.Query()
+			query.Add("authToken", hex.EncodeToString(key))
+			dumpURL.RawQuery = query.Encode()
+
+			newDb, err := sql.Open("libsql", dumpURL.String()); // TODO: configure a better way of doing this in prod
 			if err != nil {
 				panic(err)
 			}
