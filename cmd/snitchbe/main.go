@@ -133,7 +133,7 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 			groupID := uuid.New()
 			requestURL := libSQLHttpURL.JoinPath(fmt.Sprintf("v1/namespaces/%s/create", groupID))
 
-			request, err := http.NewRequestWithContext(r.Context(), "GET", requestURL.String(), nil)
+			request, err := http.NewRequestWithContext(r.Context(), "POST", requestURL.String(), nil)
 			if err != nil {
 				slogger.Error("Request Creation", "Error", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -173,7 +173,6 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 				return
 			}
 
-			slogger.InfoContext(r.Context(), "DDL", "Remote DDL", assets.RemoteDDL)
 			result, err := db.ExecContext(r.Context(), assets.RemoteDDL)
 			if err != nil {
 				slogger.Error("Create Table", "Error", err)
