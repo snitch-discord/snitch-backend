@@ -22,7 +22,7 @@ import (
 	"snitch/snitchbe/pkg/middleware"
 
 	"github.com/google/uuid"
-	_ "github.com/tursodatabase/libsql-client-go/libsql"
+	_ "github.com/tursodatabase/go-libsql"
 )
 
 type Report struct {

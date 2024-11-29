@@ -1,4 +1,4 @@
-FROM golang:alpine AS build
+FROM golang:bookworm AS build
 LABEL authors="minz1"
 
 WORKDIR /src
@@ -8,8 +8,10 @@ COPY cmd cmd
 COPY internal internal
 COPY pkg pkg
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/snitchbe ./cmd/snitchbe
+RUN GOOS=linux go build -ldflags '-linkmode external -extldflags "-static"' -o /bin/snitchbe ./cmd/snitchbe
 
-FROM scratch
+FROM debian
+RUN apt-get update
+RUN apt-get -y install ca-certificates
 COPY --from=build /bin/snitchbe /bin/snitchbe
 CMD ["/bin/snitchbe"]
