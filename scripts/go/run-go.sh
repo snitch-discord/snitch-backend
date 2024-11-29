@@ -13,6 +13,6 @@ docker run -d --name ${GO_IMAGE_NAME} \
   --network snitch-network \
   -p 8080:8080 \
   -e LIBSQL_HOST=snitch-sqld \
-  -e LIBSQL_PORT=8081 \
+  -e LIBSQL_PORT=8080 \
   -e LIBSQL_AUTH_KEY="$PRIVATE_KEY" \
   ${GO_IMAGE_NAME}

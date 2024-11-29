@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"fmt"
+	"net/url"
 	"os"
 	"sort"
 )
@@ -37,10 +38,10 @@ func LibSQLConfigFromEnv() (LibSQLConfig, error) {
 	return cfg, nil
 }
 
-func (libsqlConfig LibSQLConfig) HttpURL() string {
-	return fmt.Sprintf("http://%s:%s", libsqlConfig.Host, libsqlConfig.Port)
+func (libSQLConfig LibSQLConfig) HttpURL() (*url.URL, error) {
+	return url.Parse(fmt.Sprintf("http://%s:%s", libSQLConfig.Host, libSQLConfig.Port))
 }
 
-func (libsqlConfig LibSQLConfig) DatabaseURL(key ed25519.PrivateKey) string {
-	return fmt.Sprintf("libsql://%s:%s?authToken=%s", libsqlConfig.Host, libsqlConfig.Port, hex.EncodeToString(key))
+func (libSQLConfig LibSQLConfig) DatabaseURL(key ed25519.PrivateKey) (*url.URL, error) {
+	return url.Parse(fmt.Sprintf("libsql://%s:%s?authToken=%s", libSQLConfig.Host, libSQLConfig.Port, hex.EncodeToString(key)))
 }

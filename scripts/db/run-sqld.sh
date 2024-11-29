@@ -21,5 +21,6 @@ docker run -p 8081:8080 -d --name ${DB_IMAGE_NAME} -ti \
   -e SQLD_NODE=primary \
   -e SQLD_DB_PATH=snitch.db \
   -e SQLD_AUTH_JWT_KEY="${PUBLIC_KEY}" \
+  -e RUST_LOG=sqld=trace \
   -v "${DB_DATA_PATH}":/var/lib/sqld \
   ghcr.io/tursodatabase/libsql-server:latest

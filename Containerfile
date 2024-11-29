@@ -1,4 +1,4 @@
-FROM golang:bookworm AS build
+FROM golang:alpine AS build
 LABEL authors="minz1"
 
 WORKDIR /src

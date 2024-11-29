@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/x509"
 	"database/sql"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"flag"
@@ -12,6 +13,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"snitch/snitchbe/internal/dbconfig"
@@ -19,14 +21,15 @@ import (
 	"snitch/snitchbe/pkg/ctxutil"
 	"snitch/snitchbe/pkg/middleware"
 
+	"github.com/google/uuid"
 	_ "github.com/tursodatabase/libsql-client-go/libsql"
 )
 
 type Report struct {
 	Text string `json:"reportText"`
-	ReporterId int `json:"reporterId,string"` // we need to tell go that our number is encoded as a string, hence ',string'
-	ReportedUserId int `json:"reporteduserId,string"` // we need to tell go that our number is encoded as a string, hence ',string'
-	ServerId int `json:"serverId,string"` // we need to tell go that our number is encoded as a string, hence ',string'
+	ReporterID int `json:"reporterId,string"` // we need to tell go that our number is encoded as a string, hence ',string'
+	ReportedUserID int `json:"reporteduserId,string"` // we need to tell go that our number is encoded as a string, hence ',string'
+	ServerID int `json:"serverId,string"` // we need to tell go that our number is encoded as a string, hence ',string'
 }
 
 func createReportHandler(db *sql.DB) http.HandlerFunc {
@@ -83,15 +86,30 @@ func createReportHandler(db *sql.DB) http.HandlerFunc {
 	}
 }
 
+type registrationRequest struct {
+	ServerID int `json:"serverId,string"` // we need to tell go that our number is encoded as a string, hence ',string'
+	UserID int `json:"userId,string"` // we need to tell go that our number is encoded as a string, hence ',string'
+}
 
-// func createDatabase(newDatabaseName string, sqlConfig dbconfig.LibSQLConfig) string {
-// 	ctx := context.TODO();
-// 	requestUrl := sqlConfig.DatabaseUrl + "/v1/organizations/"
+type registrationResponse struct {
+	ServerID int `json:"serverId,string"` // we need to tell go that our number is encoded as a string, hence ',string'
+	GroupID string `json:"groupId"`
+}
 
-// }
+func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlConfig dbconfig.LibSQLConfig, key ed25519.PrivateKey) http.HandlerFunc {
+	newDatabaseURL, err := libSqlConfig.DatabaseURL(key)
+	if (err != nil) {
+		panic(err)
+	}
 
-func createDatabaseHandler(tokenCache *jwt.TokenCache, libsqlUrl string) http.HandlerFunc {
-	httpClient := &http.Client{}
+	libSQLHttpURL, err := libSqlConfig.HttpURL()
+	if (err != nil) {
+		panic(err)
+	}
+
+	httpClient := &http.Client{
+		Timeout: 5 * time.Second,
+	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		slogger, ok := ctxutil.Value[*slog.Logger](r.Context())
@@ -100,25 +118,70 @@ func createDatabaseHandler(tokenCache *jwt.TokenCache, libsqlUrl string) http.Ha
 		}
 
 		switch (r.Method) {
-		case "GET":
+		case "POST":
 			w.Header().Set("Content-Type", "application/json")
-			
-			request, _ := http.NewRequestWithContext(r.Context(), "GET", libsqlUrl + "/v1", nil)
-			request.Header.Add("Authorization", "Bearer " + tokenCache.Get())
-			response, err := httpClient.Do(request)
+			var registrationRequest registrationRequest
 
+			err := json.NewDecoder(r.Body).Decode(&registrationRequest)
+			defer r.Body.Close()
 			if err != nil {
-				slogger.Error("Error", "Error", err)
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+
+			groupID := uuid.New()
+			requestURL := libSQLHttpURL.JoinPath(fmt.Sprintf("v1/namespaces/%s/create", groupID))
+
+			request, err := http.NewRequestWithContext(r.Context(), "GET", requestURL.String(), nil)
+			if err != nil {
+				slogger.Error("Request Creation", "Error", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 
-			defer response.Body.Close()
-			_, err = io.Copy(w, response.Body)
+			request.Header.Add("Authorization", "Bearer " + tokenCache.Get())
+			slogger.Info("DEBUG", "Header", request.Header)
+			response, err := httpClient.Do(request)
 			if err != nil {
-				slogger.Error("Error", "Error", err)
+				slogger.Error("Client Call", "Error", err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			responseBodyString := new(strings.Builder)
+			_, err = io.Copy(responseBodyString, response.Body)
+			defer response.Body.Close()
+			if (err != nil) {
+				slogger.Error("Create String Buffer", "Error", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
+			slogger.InfoContext(r.Context(), "Response", "Body", responseBodyString)
+
+			newDatabaseURL.Host = fmt.Sprintf("%s.%s", groupID.String(), newDatabaseURL.Host)
+			slogger.Info("New URL", "URL", newDatabaseURL)
+
+			newDb, err := sql.Open("libsql", newDatabaseURL.String());
+			if err != nil {
+				panic(err)
+			}
+			defer newDb.Close()
+
+			if err := newDb.PingContext(r.Context()); err != nil {
+				slogger.Error("Ping Database", "Error", err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			createStatement := "CREATE TABLE test ( test_id INTEGER PRIMARY KEY );"
+			result, err := db.ExecContext(r.Context(), createStatement)
+			if err != nil {
+				slogger.Error("Create Table", "Error", err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			slogger.InfoContext(r.Context(), "Create Table Result", "Result", result)
+			json.NewEncoder(w).Encode(registrationResponse{ ServerID: registrationRequest.ServerID, GroupID: groupID.String()})
 		default:
 			http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
 		}
@@ -133,30 +196,34 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	ctx := context.Background()
 
 	block, _ := pem.Decode([]byte(libSQLConfig.AuthKey))
 	parseResult, _ := x509.ParsePKCS8PrivateKey(block.Bytes)
 	key := parseResult.(ed25519.PrivateKey)
 
+	libSQLDatabaseURL, err := libSQLConfig.DatabaseURL(key)
+	if err != nil {
+		panic(err)
+	}
+
 	jwtDuration := 10 * time.Minute
 	jwtCache := &jwt.TokenCache{}
 	go jwt.StartJwtGeneration(jwtDuration, jwtCache, key)
 
-	db, err:= sql.Open("libsql", libSQLConfig.DatabaseURL(key));
+	db, err := sql.Open("libsql", libSQLDatabaseURL.String());
 	if err != nil {
 		panic(err)
 	}
 	defer db.Close()
 
-	dbCtx, cancel := context.WithTimeout(ctx, time.Second * 5)
+	dbCtx, cancel := context.WithTimeout(context.Background(), time.Second * 5)
 	defer cancel()
 	if err := db.PingContext(dbCtx); err != nil {
 		panic(err)
 	}
 
 	reportEndpointHandler := createReportHandler(db)
-	databaseEndpointHandler := createDatabaseHandler(jwtCache, libSQLConfig.HttpURL())
+	databaseEndpointHandler := createRegistrationHandler(jwtCache, db, libSQLConfig, key)
 
 	var handler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
