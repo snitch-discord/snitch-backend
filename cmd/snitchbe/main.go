@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"snitch/snitchbe/assets"
 	"snitch/snitchbe/internal/dbconfig"
 	"snitch/snitchbe/internal/jwt"
 	"snitch/snitchbe/pkg/ctxutil"
@@ -172,8 +173,8 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 				return
 			}
 
-			createStatement := "CREATE TABLE test ( test_id INTEGER PRIMARY KEY );"
-			result, err := db.ExecContext(r.Context(), createStatement)
+			slogger.InfoContext(r.Context(), "DDL", "Remote DDL", assets.RemoteDDL)
+			result, err := db.ExecContext(r.Context(), assets.RemoteDDL)
 			if err != nil {
 				slogger.Error("Create Table", "Error", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)

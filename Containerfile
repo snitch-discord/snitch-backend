@@ -7,6 +7,7 @@ COPY go.mod go.sum ./
 COPY cmd cmd
 COPY internal internal
 COPY pkg pkg
+COPY assets assets
 
 RUN GOOS=linux go build -ldflags '-linkmode external -extldflags "-static"' -o /bin/snitchbe ./cmd/snitchbe
 
