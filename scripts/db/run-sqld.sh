@@ -20,8 +20,8 @@ docker run -p 8081:8080 -p 9091:9090 -d --name ${DB_IMAGE_NAME} -ti \
   --network snitch-network \
   -e SQLD_NODE=primary \
   -e SQLD_DB_PATH=snitch.db \
-  -e SQLD_AUTH_JWT_KEY="${PUBLIC_KEY}" \
+  -e SQLD_ADMIN_LISTEN_ADDR=0.0.0.0:9090 \
   -e RUST_LOG=trace \
   -v "${DB_DATA_PATH}":/var/lib/sqld \
   ghcr.io/tursodatabase/libsql-server:latest \
-  sqld --admin-listen-addr 0.0.0.0:9090 --enable-namespaces
+  sqld --enable-namespaces

@@ -8,4 +8,4 @@ export LIBSQL_PORT=8081
 export LIBSQL_ADMIN_PORT=9091
 export LIBSQL_AUTH_KEY="$PRIVATE_KEY"
 
-go run "${BASE_DIR}"/cmd/snitchbe/main.go
+go run -x "${BASE_DIR}"/cmd/snitchbe/main.go

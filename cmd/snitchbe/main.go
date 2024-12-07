@@ -15,7 +15,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"time"
 
 	"snitch/snitchbe/assets"
@@ -25,7 +24,7 @@ import (
 	"snitch/snitchbe/pkg/middleware"
 
 	"github.com/google/uuid"
-	_ "github.com/tursodatabase/go-libsql"
+	"github.com/tursodatabase/libsql-client-go/libsql"
 )
 
 type Report struct {
@@ -105,8 +104,15 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 		panic(err)
 	}
 
+	// libSQLHttpURL, err := libSqlConfig.HttpURL()
+	// if (err != nil) {
+	// 	panic(err)
+	// }
+
+	// authToken := hex.EncodeToString(key)
+
 	httpClient := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: time.Minute,
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -128,17 +134,10 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 			}
 
 			groupID := uuid.New()
-			requestURL := libSQLAdminURL.JoinPath(fmt.Sprintf("v1/namespaces/%s/create", groupID))
+			// groupHost := fmt.Sprintf("%s.%s", groupID.String(), "local")
+			requestURL := libSQLAdminURL.JoinPath(fmt.Sprintf("v1/namespaces/%s/create", fmt.Sprintf("%s.%s", groupID.String(), "local")))
 
-			dumpURL, err := url.Parse(fmt.Sprintf("http://%s.db.sarna.dev:8080", groupID.String())) // TODO: configure different domains for different environments. we can't use this in PROD
-			if (err != nil) {
-				slogger.ErrorContext(r.Context(), "Error Retrieving HTTP URL", "Error", err)
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			dumpURL.Host = fmt.Sprintf("%s.%s", groupID.String(), dumpURL.Host)
-
-			requestStruct := struct { DumpURL string `json:"dump_url"` }{ DumpURL: dumpURL.String()}
+			requestStruct := struct { DumpURL *string `json:"dump_url"` }{ DumpURL: nil }
 			requestBody, err := json.Marshal(requestStruct)
 			if err != nil {
 				slog.ErrorContext(r.Context(), "JSON Marshalling", "Error", err)
@@ -155,8 +154,7 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 
 			request.Header.Add("Authorization", "Bearer " + tokenCache.Get())
 			request.Header.Add("Content-Type", "application/json")
-			request.Header.Add("Host", dumpURL.Hostname())
-			slogger.Info("DEBUG", "Header", request.Header)
+			request.Header.Add("Host", fmt.Sprintf("%s.%s", groupID.String(), "local"))
 			response, err := httpClient.Do(request)
 			if err != nil {
 				slogger.Error("Client Call", "Error", err)
@@ -171,26 +169,16 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 				http.Error(w, "Unexpected Response, Status: " + response.Status, response.StatusCode)
 				return
 			}
-
-			// newDatabaseURL, err := libSqlConfig.DatabaseURL(key)
-			// if (err != nil) {
-			// 	slogger.ErrorContext(r.Context(), "Error Retrieving DB URL", "Error", err)
-			// 	http.Error(w, err.Error(), http.StatusInternalServerError)
-			// 	return
-			// }
-
-			// newDatabaseURL.Host = fmt.Sprintf("%s.%s", groupID.String(), newDatabaseURL.Host)
-			// databaseURLWithPath := newDatabaseURL.JoinPath("dev/"+groupID.String())
-
-			// slogger.Info("New URL", "URL", databaseURLWithPath)
-			query := dumpURL.Query()
-			query.Add("authToken", hex.EncodeToString(key))
-			dumpURL.RawQuery = query.Encode()
-
-			newDb, err := sql.Open("libsql", dumpURL.String()); // TODO: configure a better way of doing this in prod
+			
+			// connector, err := libsql.NewConnector(groupHost, libsql.WithProxy("http://snitch-sqld:8080"), libsql.WithAuthToken(tokenCache.Get()), libsql.WithTls(false))
+			connector, err := libsql.NewConnector(fmt.Sprintf("http://%s.%s", groupID.String(), "local"), libsql.WithAuthToken(tokenCache.Get()), libsql.WithProxy("http://snitch-sqld:8080"), libsql.WithTls(false))
 			if err != nil {
-				panic(err)
+				slogger.Error("New libSQL Connector", "Error", err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
 			}
+
+			newDb := sql.OpenDB(connector)
 			defer newDb.Close()
 
 			if err := newDb.PingContext(r.Context()); err != nil {
@@ -227,7 +215,7 @@ func main() {
 	parseResult, _ := x509.ParsePKCS8PrivateKey(block.Bytes)
 	key := parseResult.(ed25519.PrivateKey)
 
-	libSQLDatabaseURL, err := libSQLConfig.DatabaseURL(key)
+	libSQLDatabaseURL, err := libSQLConfig.DatabaseURL()
 	if err != nil {
 		panic(err)
 	}
@@ -236,11 +224,12 @@ func main() {
 	jwtCache := &jwt.TokenCache{}
 	go jwt.StartJwtGeneration(jwtDuration, jwtCache, key)
 
-	db, err := sql.Open("libsql", libSQLDatabaseURL.String());
+	authToken := hex.EncodeToString(key)
+	connector, err := libsql.NewConnector(libSQLDatabaseURL.String(), libsql.WithAuthToken(authToken))
 	if err != nil {
 		panic(err)
 	}
-	defer db.Close()
+	db := sql.OpenDB(connector)
 
 	dbCtx, cancel := context.WithTimeout(context.Background(), time.Second * 5)
 	defer cancel()
