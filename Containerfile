@@ -11,8 +11,6 @@ COPY assets assets
 
 RUN GOOS=linux go build -ldflags '-linkmode external -extldflags "-static"' -o /bin/snitchbe ./cmd/snitchbe
 
-FROM debian
-RUN apt-get update
-RUN apt-get -y install ca-certificates
+FROM scratch
 COPY --from=build /bin/snitchbe /bin/snitchbe
 CMD ["/bin/snitchbe"]
