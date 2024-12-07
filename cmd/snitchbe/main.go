@@ -6,7 +6,6 @@ import (
 	"crypto/ed25519"
 	"crypto/x509"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -25,19 +24,19 @@ import (
 	"snitch/snitchbe/pkg/middleware"
 
 	"github.com/google/uuid"
-	_ "github.com/tursodatabase/go-libsql"
+	"github.com/tursodatabase/libsql-client-go/libsql"
 )
 
 type Report struct {
-	Text string `json:"reportText"`
-	ReporterID int `json:"reporterId,string"` // we need to tell go that our number is encoded as a string, hence ',string'
-	ReportedUserID int `json:"reporteduserId,string"` // we need to tell go that our number is encoded as a string, hence ',string'
-	ServerID int `json:"serverId,string"` // we need to tell go that our number is encoded as a string, hence ',string'
+	Text           string `json:"reportText"`
+	ReporterID     int    `json:"reporterId,string"`     // we need to tell go that our number is encoded as a string, hence ',string'
+	ReportedUserID int    `json:"reporteduserId,string"` // we need to tell go that our number is encoded as a string, hence ',string'
+	ServerID       int    `json:"serverId,string"`       // we need to tell go that our number is encoded as a string, hence ',string'
 }
 
 func createReportHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		switch (r.Method) {
+		switch r.Method {
 		case "GET":
 			// w.Header().Set("Content-Type", "application/json")
 			// var tournaments []Tournament
@@ -91,17 +90,17 @@ func createReportHandler(db *sql.DB) http.HandlerFunc {
 
 type registrationRequest struct {
 	ServerID int `json:"serverId,string"` // we need to tell go that our number is encoded as a string, hence ',string'
-	UserID int `json:"userId,string"` // we need to tell go that our number is encoded as a string, hence ',string'
+	UserID   int `json:"userId,string"`   // we need to tell go that our number is encoded as a string, hence ',string'
 }
 
 type registrationResponse struct {
-	ServerID int `json:"serverId,string"` // we need to tell go that our number is encoded as a string, hence ',string'
-	GroupID string `json:"groupId"`
+	ServerID int    `json:"serverId,string"` // we need to tell go that our number is encoded as a string, hence ',string'
+	GroupID  string `json:"groupId"`
 }
 
 func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlConfig dbconfig.LibSQLConfig, key ed25519.PrivateKey) http.HandlerFunc {
 	libSQLAdminURL, err := libSqlConfig.AdminURL()
-	if (err != nil) {
+	if err != nil {
 		panic(err)
 	}
 
@@ -115,7 +114,7 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 			slogger = slog.Default()
 		}
 
-		switch (r.Method) {
+		switch r.Method {
 		case "POST":
 			w.Header().Set("Content-Type", "application/json")
 			var registrationRequest registrationRequest
@@ -131,14 +130,15 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 			requestURL := libSQLAdminURL.JoinPath(fmt.Sprintf("v1/namespaces/%s/create", groupID))
 
 			dumpURL, err := url.Parse(fmt.Sprintf("http://%s.db.sarna.dev:8080", groupID.String())) // TODO: configure different domains for different environments. we can't use this in PROD
-			if (err != nil) {
+			if err != nil {
 				slogger.ErrorContext(r.Context(), "Error Retrieving HTTP URL", "Error", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			dumpURL.Host = fmt.Sprintf("%s.%s", groupID.String(), dumpURL.Host)
 
-			requestStruct := struct { DumpURL string `json:"dump_url"` }{ DumpURL: dumpURL.String()}
+			requestStruct := struct {
+				DumpURL string `json:"dump_url"`
+			}{DumpURL: dumpURL.String()}
 			requestBody, err := json.Marshal(requestStruct)
 			if err != nil {
 				slog.ErrorContext(r.Context(), "JSON Marshalling", "Error", err)
@@ -153,7 +153,7 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 				return
 			}
 
-			request.Header.Add("Authorization", "Bearer " + tokenCache.Get())
+			request.Header.Add("Authorization", "Bearer "+tokenCache.Get())
 			request.Header.Add("Content-Type", "application/json")
 			request.Header.Add("Host", dumpURL.Hostname())
 			slogger.Info("DEBUG", "Header", request.Header)
@@ -168,29 +168,16 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 				body, _ := io.ReadAll(response.Body)
 				defer response.Body.Close()
 				slogger.Error("Unexpected Response", "Status", response.Status, "StatusCode", response.StatusCode, "Body", string(body))
-				http.Error(w, "Unexpected Response, Status: " + response.Status, response.StatusCode)
+				http.Error(w, "Unexpected Response, Status: "+response.Status, response.StatusCode)
 				return
 			}
 
-			// newDatabaseURL, err := libSqlConfig.DatabaseURL(key)
-			// if (err != nil) {
-			// 	slogger.ErrorContext(r.Context(), "Error Retrieving DB URL", "Error", err)
-			// 	http.Error(w, err.Error(), http.StatusInternalServerError)
-			// 	return
-			// }
+			conn, err := libsql.NewConnector(fmt.Sprintf("http://%s.%s", groupID.String(), "localhost"), libsql.WithProxy("http://snitch-sqld:8080"), libsql.WithAuthToken(tokenCache.Get()))
 
-			// newDatabaseURL.Host = fmt.Sprintf("%s.%s", groupID.String(), newDatabaseURL.Host)
-			// databaseURLWithPath := newDatabaseURL.JoinPath("dev/"+groupID.String())
-
-			// slogger.Info("New URL", "URL", databaseURLWithPath)
-			query := dumpURL.Query()
-			query.Add("authToken", hex.EncodeToString(key))
-			dumpURL.RawQuery = query.Encode()
-
-			newDb, err := sql.Open("libsql", dumpURL.String()); // TODO: configure a better way of doing this in prod
 			if err != nil {
 				panic(err)
 			}
+			newDb := sql.OpenDB(conn)
 			defer newDb.Close()
 
 			if err := newDb.PingContext(r.Context()); err != nil {
@@ -199,7 +186,7 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 				return
 			}
 
-			result, err := db.ExecContext(r.Context(), assets.RemoteDDL)
+			result, err := newDb.ExecContext(r.Context(), assets.RemoteDDL)
 			if err != nil {
 				slogger.Error("Create Table", "Error", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -207,7 +194,9 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 			}
 
 			slogger.InfoContext(r.Context(), "Create Table Result", "Result", result)
-			json.NewEncoder(w).Encode(registrationResponse{ ServerID: registrationRequest.ServerID, GroupID: groupID.String()})
+
+			json.NewEncoder(w).Encode(registrationResponse{ServerID: registrationRequest.ServerID, GroupID: groupID.String()})
+
 		default:
 			http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
 		}
@@ -215,7 +204,7 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 }
 
 func main() {
-	port := flag.Int("port", 8080, "port to listen on")
+	port := flag.Int("port", 4200, "port to listen on")
 	flag.Parse()
 
 	libSQLConfig, err := dbconfig.LibSQLConfigFromEnv()
@@ -236,13 +225,13 @@ func main() {
 	jwtCache := &jwt.TokenCache{}
 	go jwt.StartJwtGeneration(jwtDuration, jwtCache, key)
 
-	db, err := sql.Open("libsql", libSQLDatabaseURL.String());
+	db, err := sql.Open("libsql", libSQLDatabaseURL.String())
 	if err != nil {
 		panic(err)
 	}
 	defer db.Close()
 
-	dbCtx, cancel := context.WithTimeout(context.Background(), time.Second * 5)
+	dbCtx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 	if err := db.PingContext(dbCtx); err != nil {
 		panic(err)
@@ -268,11 +257,11 @@ func main() {
 	handler = middleware.Log(handler)
 	handler = middleware.Trace(handler)
 
-	server := http.Server {
-		Addr: fmt.Sprintf(":%d", *port),
-		Handler: handler,
-		ReadTimeout: 1 * time.Second,
-		WriteTimeout: 1 * time.Second,
+	server := http.Server{
+		Addr:              fmt.Sprintf(":%d", *port),
+		Handler:           handler,
+		ReadTimeout:       1 * time.Second,
+		WriteTimeout:      1 * time.Second,
 		ReadHeaderTimeout: 200 * time.Millisecond,
 	}
 

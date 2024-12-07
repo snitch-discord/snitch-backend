@@ -11,7 +11,7 @@ docker build -t ${GO_IMAGE_NAME} -f "${BASE_DIR}"/Containerfile .
 
 docker run -d --name ${GO_IMAGE_NAME} \
   --network snitch-network \
-  -p 8080:8080 \
+  -p 4200:4200 \
   -e LIBSQL_HOST=snitch-sqld \
   -e LIBSQL_PORT=8080 \
   -e LIBSQL_ADMIN_PORT=9090 \
