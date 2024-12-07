@@ -30,8 +30,6 @@ func createJwtGenerator(key ed25519.PrivateKey) func(time.Duration) (string, err
 	return func(duration time.Duration) (string, error) {
 		token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{
 			"exp": time.Now().Add(duration).Unix(),
-			"iat": time.Now().Unix(),
-			"a":   "rw",
 		})
 
 		return token.SignedString(key)

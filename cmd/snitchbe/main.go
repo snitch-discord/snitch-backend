@@ -14,7 +14,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"time"
 
 	"snitch/snitchbe/assets"
@@ -98,8 +97,13 @@ type registrationResponse struct {
 	GroupID  string `json:"groupId"`
 }
 
-func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlConfig dbconfig.LibSQLConfig, key ed25519.PrivateKey) http.HandlerFunc {
+func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlConfig dbconfig.LibSQLConfig) http.HandlerFunc {
 	libSQLAdminURL, err := libSqlConfig.AdminURL()
+	if err != nil {
+		panic(err)
+	}
+
+	libSQLHttpURL, err := libSqlConfig.HttpURL()
 	if err != nil {
 		panic(err)
 	}
@@ -129,16 +133,10 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 			groupID := uuid.New()
 			requestURL := libSQLAdminURL.JoinPath(fmt.Sprintf("v1/namespaces/%s/create", groupID))
 
-			dumpURL, err := url.Parse(fmt.Sprintf("http://%s.db.sarna.dev:8080", groupID.String())) // TODO: configure different domains for different environments. we can't use this in PROD
-			if err != nil {
-				slogger.ErrorContext(r.Context(), "Error Retrieving HTTP URL", "Error", err)
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-
 			requestStruct := struct {
-				DumpURL string `json:"dump_url"`
-			}{DumpURL: dumpURL.String()}
+				DumpURL *string `json:"dump_url"`
+			}{DumpURL: nil}
+
 			requestBody, err := json.Marshal(requestStruct)
 			if err != nil {
 				slog.ErrorContext(r.Context(), "JSON Marshalling", "Error", err)
@@ -155,8 +153,6 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 
 			request.Header.Add("Authorization", "Bearer "+tokenCache.Get())
 			request.Header.Add("Content-Type", "application/json")
-			request.Header.Add("Host", dumpURL.Hostname())
-			slogger.Info("DEBUG", "Header", request.Header)
 			response, err := httpClient.Do(request)
 			if err != nil {
 				slogger.Error("Client Call", "Error", err)
@@ -172,7 +168,7 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 				return
 			}
 
-			conn, err := libsql.NewConnector(fmt.Sprintf("http://%s.%s", groupID.String(), "localhost"), libsql.WithProxy("http://snitch-sqld:8080"), libsql.WithAuthToken(tokenCache.Get()))
+			conn, err := libsql.NewConnector(fmt.Sprintf("http://%s.%s", groupID.String(), "db"), libsql.WithProxy(libSQLHttpURL.String()), libsql.WithAuthToken(tokenCache.Get()))
 
 			if err != nil {
 				panic(err)
@@ -238,7 +234,7 @@ func main() {
 	}
 
 	reportEndpointHandler := createReportHandler(db)
-	databaseEndpointHandler := createRegistrationHandler(jwtCache, db, libSQLConfig, key)
+	databaseEndpointHandler := createRegistrationHandler(jwtCache, db, libSQLConfig)
 
 	var handler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
