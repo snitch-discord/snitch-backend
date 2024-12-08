@@ -36,13 +36,7 @@ func createJwtGenerator(key ed25519.PrivateKey) func(time.Duration) (string, err
 	}
 }
 
-func StartJwtGeneration(interval time.Duration, tokenCache *TokenCache, key ed25519.PrivateKey) {
-	jwtGenerator := createJwtGenerator(key)
-	firstToken, err := jwtGenerator(interval)
-	if err != nil {
-		slog.Error("Error generating token", "Error", err)
-	}
-	tokenCache.set(firstToken)
+func startJwtTicker(interval time.Duration, tokenCache *TokenCache, jwtGenerator func(time.Duration) (string, error)) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -57,4 +51,15 @@ func StartJwtGeneration(interval time.Duration, tokenCache *TokenCache, key ed25
 			tokenCache.set(token)
 		}
 	}
+}
+
+func StartJwtGeneration(interval time.Duration, tokenCache *TokenCache, key ed25519.PrivateKey) {
+	jwtGenerator := createJwtGenerator(key)
+	firstToken, err := jwtGenerator(interval)
+	if err != nil {
+		slog.Error("Error generating token", "Error", err)
+	}
+	tokenCache.set(firstToken)
+	
+	go startJwtTicker(interval, tokenCache, jwtGenerator)
 }

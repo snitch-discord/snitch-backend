@@ -219,7 +219,7 @@ func main() {
 
 	jwtDuration := 10 * time.Minute
 	jwtCache := &jwt.TokenCache{}
-	go jwt.StartJwtGeneration(jwtDuration, jwtCache, key)
+	jwt.StartJwtGeneration(jwtDuration, jwtCache, key)
 
 	db, err := sql.Open("libsql", libSQLDatabaseURL.String())
 	if err != nil {
