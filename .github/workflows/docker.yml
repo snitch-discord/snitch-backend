@@ -3,7 +3,7 @@ name: Build Docker Image
 on:
   push:
     branches:
-      - "feature/GHA"
+      - "main"
 
 env:
   REGISTRY: ghcr.io
