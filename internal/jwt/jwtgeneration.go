@@ -20,7 +20,7 @@ func (tokenCache *TokenCache) set(token string) {
 	tokenCache.token = token
 }
 
-func (tokenCache * TokenCache) Get() string {
+func (tokenCache *TokenCache) Get() string {
 	tokenCache.mutex.Lock()
 	defer tokenCache.mutex.Unlock()
 	return tokenCache.token
@@ -28,11 +28,11 @@ func (tokenCache * TokenCache) Get() string {
 
 func createJwtGenerator(key ed25519.PrivateKey) func(time.Duration) (string, error) {
 	return func(duration time.Duration) (string, error) {
-		token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims {
-			"exp": time.Now().Add(duration),
+		token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{
+			"exp": time.Now().Add(duration).Unix(),
 		})
 
-		return token.SignedString(key) 
+		return token.SignedString(key)
 	}
 }
 
@@ -48,7 +48,7 @@ func StartJwtGeneration(interval time.Duration, tokenCache *TokenCache, key ed25
 
 	for {
 		select {
-		case <- ticker.C:
+		case <-ticker.C:
 			token, err := jwtGenerator(interval)
 			if err != nil {
 				slog.Error("Error generating token", "Error", err)

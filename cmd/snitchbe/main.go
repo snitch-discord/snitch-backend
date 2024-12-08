@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/x509"
 	"database/sql"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"flag"
@@ -14,24 +16,26 @@ import (
 	"net/http"
 	"time"
 
+	"snitch/snitchbe/assets"
 	"snitch/snitchbe/internal/dbconfig"
 	"snitch/snitchbe/internal/jwt"
 	"snitch/snitchbe/pkg/ctxutil"
 	"snitch/snitchbe/pkg/middleware"
 
-	_ "github.com/tursodatabase/libsql-client-go/libsql"
+	"github.com/google/uuid"
+	"github.com/tursodatabase/libsql-client-go/libsql"
 )
 
 type Report struct {
-	Text string `json:"reportText"`
-	ReporterId int `json:"reporterId,string"` // we need to tell go that our number is encoded as a string, hence ',string'
-	ReportedUserId int `json:"reporteduserId,string"` // we need to tell go that our number is encoded as a string, hence ',string'
-	ServerId int `json:"serverId,string"` // we need to tell go that our number is encoded as a string, hence ',string'
+	Text           string `json:"reportText"`
+	ReporterID     int    `json:"reporterId,string"`     // we need to tell go that our number is encoded as a string, hence ',string'
+	ReportedUserID int    `json:"reporteduserId,string"` // we need to tell go that our number is encoded as a string, hence ',string'
+	ServerID       int    `json:"serverId,string"`       // we need to tell go that our number is encoded as a string, hence ',string'
 }
 
 func createReportHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		switch (r.Method) {
+		switch r.Method {
 		case "GET":
 			// w.Header().Set("Content-Type", "application/json")
 			// var tournaments []Tournament
@@ -83,15 +87,30 @@ func createReportHandler(db *sql.DB) http.HandlerFunc {
 	}
 }
 
+type registrationRequest struct {
+	ServerID int `json:"serverId,string"` // we need to tell go that our number is encoded as a string, hence ',string'
+	UserID   int `json:"userId,string"`   // we need to tell go that our number is encoded as a string, hence ',string'
+}
 
-// func createDatabase(newDatabaseName string, sqlConfig dbconfig.LibSQLConfig) string {
-// 	ctx := context.TODO();
-// 	requestUrl := sqlConfig.DatabaseUrl + "/v1/organizations/"
+type registrationResponse struct {
+	ServerID int    `json:"serverId,string"` // we need to tell go that our number is encoded as a string, hence ',string'
+	GroupID  string `json:"groupId"`
+}
 
-// }
+func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlConfig dbconfig.LibSQLConfig) http.HandlerFunc {
+	libSQLAdminURL, err := libSqlConfig.AdminURL()
+	if err != nil {
+		panic(err)
+	}
 
-func createDatabaseHandler(tokenCache *jwt.TokenCache, libsqlUrl string) http.HandlerFunc {
-	httpClient := &http.Client{}
+	libSQLHttpURL, err := libSqlConfig.HttpURL()
+	if err != nil {
+		panic(err)
+	}
+
+	httpClient := &http.Client{
+		Timeout: 5 * time.Second,
+	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		slogger, ok := ctxutil.Value[*slog.Logger](r.Context())
@@ -99,26 +118,81 @@ func createDatabaseHandler(tokenCache *jwt.TokenCache, libsqlUrl string) http.Ha
 			slogger = slog.Default()
 		}
 
-		switch (r.Method) {
-		case "GET":
+		switch r.Method {
+		case "POST":
 			w.Header().Set("Content-Type", "application/json")
-			
-			request, _ := http.NewRequestWithContext(r.Context(), "GET", libsqlUrl + "/v1", nil)
-			request.Header.Add("Authorization", "Bearer " + tokenCache.Get())
-			response, err := httpClient.Do(request)
+			var registrationRequest registrationRequest
 
+			err := json.NewDecoder(r.Body).Decode(&registrationRequest)
+			defer r.Body.Close()
 			if err != nil {
-				slogger.Error("Error", "Error", err)
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+
+			groupID := uuid.New()
+			requestURL := libSQLAdminURL.JoinPath(fmt.Sprintf("v1/namespaces/%s/create", groupID))
+
+			requestStruct := struct {
+				DumpURL *string `json:"dump_url"`
+			}{DumpURL: nil}
+
+			requestBody, err := json.Marshal(requestStruct)
+			if err != nil {
+				slog.ErrorContext(r.Context(), "JSON Marshalling", "Error", err)
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+
+			request, err := http.NewRequestWithContext(r.Context(), "POST", requestURL.String(), bytes.NewBuffer(requestBody))
+			if err != nil {
+				slogger.Error("Request Creation", "Error", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 
-			defer response.Body.Close()
-			_, err = io.Copy(w, response.Body)
+			request.Header.Add("Authorization", "Bearer "+tokenCache.Get())
+			request.Header.Add("Content-Type", "application/json")
+			response, err := httpClient.Do(request)
 			if err != nil {
-				slogger.Error("Error", "Error", err)
+				slogger.Error("Client Call", "Error", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
 			}
+
+			if response.StatusCode >= 300 || response.StatusCode < 200 {
+				body, _ := io.ReadAll(response.Body)
+				defer response.Body.Close()
+				slogger.Error("Unexpected Response", "Status", response.Status, "StatusCode", response.StatusCode, "Body", string(body))
+				http.Error(w, "Unexpected Response, Status: "+response.Status, response.StatusCode)
+				return
+			}
+
+			conn, err := libsql.NewConnector(fmt.Sprintf("http://%s.%s", groupID.String(), "db"), libsql.WithProxy(libSQLHttpURL.String()), libsql.WithAuthToken(tokenCache.Get()))
+
+			if err != nil {
+				panic(err)
+			}
+			newDb := sql.OpenDB(conn)
+			defer newDb.Close()
+
+			if err := newDb.PingContext(r.Context()); err != nil {
+				slogger.Error("Ping Database", "Error", err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			result, err := newDb.ExecContext(r.Context(), assets.RemoteDDL)
+			if err != nil {
+				slogger.Error("Create Table", "Error", err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			slogger.InfoContext(r.Context(), "Create Table Result", "Result", result)
+
+			json.NewEncoder(w).Encode(registrationResponse{ServerID: registrationRequest.ServerID, GroupID: groupID.String()})
+
 		default:
 			http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
 		}
@@ -126,37 +200,41 @@ func createDatabaseHandler(tokenCache *jwt.TokenCache, libsqlUrl string) http.Ha
 }
 
 func main() {
-	port := flag.Int("port", 8080, "port to listen on")
+	port := flag.Int("port", 4200, "port to listen on")
 	flag.Parse()
 
 	libSQLConfig, err := dbconfig.LibSQLConfigFromEnv()
 	if err != nil {
 		panic(err)
 	}
-	ctx := context.Background()
 
 	block, _ := pem.Decode([]byte(libSQLConfig.AuthKey))
 	parseResult, _ := x509.ParsePKCS8PrivateKey(block.Bytes)
 	key := parseResult.(ed25519.PrivateKey)
 
+	libSQLDatabaseURL, err := libSQLConfig.DatabaseURL(key)
+	if err != nil {
+		panic(err)
+	}
+
 	jwtDuration := 10 * time.Minute
 	jwtCache := &jwt.TokenCache{}
 	go jwt.StartJwtGeneration(jwtDuration, jwtCache, key)
 
-	db, err:= sql.Open("libsql", libSQLConfig.DatabaseURL(key));
+	db, err := sql.Open("libsql", libSQLDatabaseURL.String())
 	if err != nil {
 		panic(err)
 	}
 	defer db.Close()
 
-	dbCtx, cancel := context.WithTimeout(ctx, time.Second * 5)
+	dbCtx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 	if err := db.PingContext(dbCtx); err != nil {
 		panic(err)
 	}
 
 	reportEndpointHandler := createReportHandler(db)
-	databaseEndpointHandler := createDatabaseHandler(jwtCache, libSQLConfig.HttpURL())
+	databaseEndpointHandler := createRegistrationHandler(jwtCache, db, libSQLConfig)
 
 	var handler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -175,11 +253,11 @@ func main() {
 	handler = middleware.Log(handler)
 	handler = middleware.Trace(handler)
 
-	server := http.Server {
-		Addr: fmt.Sprintf(":%d", *port),
-		Handler: handler,
-		ReadTimeout: 1 * time.Second,
-		WriteTimeout: 1 * time.Second,
+	server := http.Server{
+		Addr:              fmt.Sprintf(":%d", *port),
+		Handler:           handler,
+		ReadTimeout:       1 * time.Second,
+		WriteTimeout:      1 * time.Second,
 		ReadHeaderTimeout: 200 * time.Millisecond,
 	}
 
