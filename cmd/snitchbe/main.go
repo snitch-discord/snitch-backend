@@ -191,6 +191,18 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 
 			slogger.InfoContext(r.Context(), "Create Table Result", "Result", result)
 
+			// now add new db to lookup Table
+
+			lookupConn, err := libsql.NewConnector(fmt.Sprintf("http://%s.%s", "lookup", "db"), libsql.WithProxy(libSQLHttpURL.String()), libsql.WithAuthToken(tokenCache.Get()))
+			if err != nil {
+				panic(err)
+			}
+
+			lookupDb := sql.OpenDB(lookupConn)
+			defer lookupDb.Close()
+
+			lookupDb.ExecContext(r.Context(), "select 1")
+
 			json.NewEncoder(w).Encode(registrationResponse{ServerID: registrationRequest.ServerID, GroupID: groupID.String()})
 
 		default:
