@@ -19,6 +19,7 @@ import (
 	"snitch/snitchbe/assets"
 	"snitch/snitchbe/internal/dbconfig"
 	"snitch/snitchbe/internal/jwt"
+	"snitch/snitchbe/lookup"
 	"snitch/snitchbe/pkg/ctxutil"
 	"snitch/snitchbe/pkg/middleware"
 
@@ -201,7 +202,36 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 			lookupDb := sql.OpenDB(lookupConn)
 			defer lookupDb.Close()
 
-			lookupDb.ExecContext(r.Context(), "select 1")
+			// we need a way to make sure the local db already exists not doing it here
+			localResult, err := lookupDb.ExecContext(r.Context(), assets.LocalDDL)
+			if err != nil {
+				slogger.Error("Create Local Table", "Error", err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			slogger.InfoContext(r.Context(), "Create Local Table Result", "Result", localResult)
+
+			lookupQueries := lookup.New(lookupDb)
+
+			newGroup, err := lookupQueries.CreateGroup(r.Context(), lookup.CreateGroupParams{
+				GroupID:   groupID.String(),
+				GroupName: groupID.String() + "'s Cool group",
+			})
+
+			if err != nil {
+				slogger.Error("Create Local Group", "Error", err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			lookupQueries.CreateServer(r.Context(),
+				lookup.CreateServerParams{
+					ServerID:        123,
+					OutputChannel:   456,
+					GroupID:         newGroup.GroupID,
+					PermissionLevel: 777,
+				})
 
 			json.NewEncoder(w).Encode(registrationResponse{ServerID: registrationRequest.ServerID, GroupID: groupID.String()})
 

@@ -1,0 +1,25 @@
+version: "2"
+sql:
+  - name: "group"
+    engine: "sqlite"
+    queries: "./assets/sql/query-group.sql"
+    schema: "./assets/sql/schema-group.sql"
+    gen:
+      go:
+        package: "group"
+        out: "group"
+        emit_json_tags: true
+        emit_prepared_queries: true
+        emit_interface: true
+
+  - name: "lookup"
+    engine: "sqlite"
+    queries: "./assets/sql/query-lookup.sql"
+    schema: "./assets/sql/schema-lookup.sql"
+    gen:
+      go:
+        package: "lookup"
+        out: "lookup"
+        emit_json_tags: true
+        emit_prepared_queries: true
+        emit_interface: true
