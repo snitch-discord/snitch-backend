@@ -1,6 +1,9 @@
 name: Run Go build and tests
 
-on: push
+on:
+  push:
+    branches-ignore:
+      - main
 
 jobs:
   build:
