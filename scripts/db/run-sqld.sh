@@ -3,7 +3,6 @@
 BASE_DIR=$(dirname "$0")/../..
 PUBLIC_KEY=$(<"${BASE_DIR}/scripts/secrets/snitch_public_key.pem")
 
-
 DB_DIR="${BASE_DIR}/scripts/db"
 DB_IMAGE_NAME=snitch-sqld
 DB_FOLDER_NAME=snitch-sqld-data
@@ -16,13 +15,14 @@ sudo rm -rf "${DB_DATA_PATH}"
 
 mkdir "${DB_DATA_PATH}"
 
-docker run -p 8081:8080 -p 9091:9090 -d --name ${DB_IMAGE_NAME} -ti \
+docker run -p 8080:8080 -p 9090:9090 -d --name ${DB_IMAGE_NAME} -ti \
   --network snitch-network \
   -e SQLD_NODE=primary \
   -e SQLD_HTTP_LISTEN_ADDR=0.0.0.0:8080 \
+  -e SQLD_ADMIN_LISTEN_ADDR=0.0.0.0:9090 \
   -e SQLD_DB_PATH=snitch.db \
   -e SQLD_AUTH_JWT_KEY="${PUBLIC_KEY}" \
   -e RUST_LOG=trace \
   -v "${DB_DATA_PATH}":/var/lib/sqld \
   ghcr.io/tursodatabase/libsql-server:latest \
-  sqld --admin-listen-addr 0.0.0.0:9090 --enable-namespaces
+  sqld --enable-namespaces
