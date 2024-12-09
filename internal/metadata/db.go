@@ -20,9 +20,17 @@ func NewMetadataDB(ctx context.Context, tokenCache *jwt.TokenCache, config dbcon
 		slogger = slog.Default()
 	}
 
-	if err := libsqladmin.CreateNamespace(ctx, tokenCache, config); err != nil {
-		slogger.ErrorContext(ctx, "Failed creating metadata namespace", "Error", err)
-		return nil, fmt.Errorf("couldnt create namespace: %w", err)
+	exists, err := libsqladmin.DoesNamespaceExist(ctx, tokenCache, config)
+	if err != nil {
+		slogger.ErrorContext(ctx, "Failed checking if namespace exists", "Error", err)
+		return nil, fmt.Errorf("couldnt check if namespace exists: %w", err)
+	}
+
+	if !exists {
+		if err := libsqladmin.CreateNamespace(ctx, tokenCache, config); err != nil {
+			slogger.ErrorContext(ctx, "Failed creating metadata namespace", "Error", err)
+			return nil, fmt.Errorf("couldnt create namespace: %w", err)
+		}
 	}
 
 	httpURL, err := config.HttpURL()
