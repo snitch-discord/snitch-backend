@@ -40,16 +40,13 @@ func startJwtTicker(interval time.Duration, tokenCache *TokenCache, jwtGenerator
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-ticker.C:
-			token, err := jwtGenerator(interval)
-			if err != nil {
-				slog.Error("Error generating token", "Error", err)
-				continue
-			}
-			tokenCache.set(token)
+	for range ticker.C {
+		token, err := jwtGenerator(interval)
+		if err != nil {
+			slog.Error("Error generating token", "Error", err)
+			continue
 		}
+		tokenCache.set(token)
 	}
 }
 
