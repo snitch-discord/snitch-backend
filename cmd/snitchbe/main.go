@@ -191,7 +191,11 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 
 			slogger.InfoContext(r.Context(), "Create Table Result", "Result", result)
 
-			json.NewEncoder(w).Encode(registrationResponse{ServerID: registrationRequest.ServerID, GroupID: groupID.String()})
+			if err = json.NewEncoder(w).Encode(registrationResponse{ServerID: registrationRequest.ServerID, GroupID: groupID.String()}); err != nil {
+				slogger.Error("Encode Response", "Error", err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 
 		default:
 			http.Error(w, "405 Method Not Allowed", http.StatusMethodNotAllowed)
