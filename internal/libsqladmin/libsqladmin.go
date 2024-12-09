@@ -4,12 +4,19 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"snitch/snitchbe/internal/dbconfig"
 	"snitch/snitchbe/internal/jwt"
+	"snitch/snitchbe/pkg/ctxutil"
 )
 
 func CreateNamespace(ctx context.Context, tokenCache *jwt.TokenCache, config dbconfig.LibSQLConfig) error {
+	slogger, ok := ctxutil.Value[*slog.Logger](ctx)
+	if !ok {
+		slogger = slog.Default()
+	}
+
 	adminURL, err := config.AdminURL()
 	if err != nil {
 		return err
@@ -20,6 +27,7 @@ func CreateNamespace(ctx context.Context, tokenCache *jwt.TokenCache, config dbc
 		bytes.NewReader([]byte(`{"dump_url": null}`)))
 
 	if err != nil {
+		slogger.ErrorContext(ctx, "Failed creating metadata namespace create request", "Error", err)
 		return err
 	}
 
@@ -28,11 +36,13 @@ func CreateNamespace(ctx context.Context, tokenCache *jwt.TokenCache, config dbc
 
 	resp, err := http.DefaultClient.Do(request)
 	if err != nil {
+		slogger.ErrorContext(ctx, "Failed executing metadata namespace create request", "Error", err)
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 300 && resp.StatusCode != http.StatusConflict {
+		slogger.ErrorContext(ctx, "Unexpected status code", "Status", resp.Status)
 		return fmt.Errorf("unexpected status: %s", resp.Status)
 	}
 

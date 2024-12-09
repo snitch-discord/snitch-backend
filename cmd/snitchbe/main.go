@@ -249,12 +249,12 @@ func main() {
 	}
 
 	metadataDb, err := metadata.NewMetadataDB(dbCtx, jwtCache, libSQLConfig)
-	defer metadataDb.Close()
 	if err != nil {
 		panic(err)
 	}
+	defer metadataDb.Close()
 
-	if err != nil {
+	if err := metadataDb.PingContext(dbCtx); err != nil {
 		panic(err)
 	}
 

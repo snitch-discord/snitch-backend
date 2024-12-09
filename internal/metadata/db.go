@@ -4,17 +4,25 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"snitch/snitchbe/assets"
 	"snitch/snitchbe/internal/dbconfig"
 	"snitch/snitchbe/internal/jwt"
 	"snitch/snitchbe/internal/libsqladmin"
+	"snitch/snitchbe/pkg/ctxutil"
 
 	"github.com/tursodatabase/libsql-client-go/libsql"
 )
 
 func NewMetadataDB(ctx context.Context, tokenCache *jwt.TokenCache, config dbconfig.LibSQLConfig) (*sql.DB, error) {
+	slogger, ok := ctxutil.Value[*slog.Logger](ctx)
+	if !ok {
+		slogger = slog.Default()
+	}
+
 	if err := libsqladmin.CreateNamespace(ctx, tokenCache, config); err != nil {
-		return nil, fmt.Errorf("create namespace: %w", err)
+		slogger.ErrorContext(ctx, "Failed creating metadata namespace", "Error", err)
+		return nil, fmt.Errorf("couldnt create namespace: %w", err)
 	}
 
 	httpURL, err := config.HttpURL()
@@ -28,13 +36,15 @@ func NewMetadataDB(ctx context.Context, tokenCache *jwt.TokenCache, config dbcon
 		libsql.WithAuthToken(tokenCache.Get()),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("create connector: %w", err)
+		slogger.ErrorContext(ctx, "Failed creating metadata connector", "Error", err)
+		return nil, fmt.Errorf("couldnt create connector: %w", err)
 	}
 
 	db := sql.OpenDB(connector)
 	if _, err := db.ExecContext(ctx, assets.LocalDDL); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("create tables: %w", err)
+		slogger.ErrorContext(ctx, "Failed creating metadata database", "Error", err)
+		return nil, fmt.Errorf("couldnt create database: %w", err)
 	}
 
 	return db, nil
