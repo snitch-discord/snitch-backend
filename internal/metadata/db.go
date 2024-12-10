@@ -3,17 +3,21 @@ package metadata
 import (
 	"context"
 	"database/sql"
+	_ "embed"
 	"fmt"
 	"log/slog"
-	"snitch/snitchbe/assets"
 	"snitch/snitchbe/internal/dbconfig"
 	"snitch/snitchbe/internal/jwt"
 	"snitch/snitchbe/internal/libsqladmin"
+	metadata "snitch/snitchbe/internal/metadata/db"
 	"snitch/snitchbe/pkg/ctxutil"
 
 	"github.com/google/uuid"
 	"github.com/tursodatabase/libsql-client-go/libsql"
 )
+
+//go:embed sql/schema.sql
+var ddl string
 
 func NewMetadataDB(ctx context.Context, tokenCache *jwt.TokenCache, config dbconfig.LibSQLConfig) (*sql.DB, error) {
 	slogger, ok := ctxutil.Value[*slog.Logger](ctx)
@@ -50,7 +54,7 @@ func NewMetadataDB(ctx context.Context, tokenCache *jwt.TokenCache, config dbcon
 	}
 
 	db := sql.OpenDB(connector)
-	if _, err := db.ExecContext(ctx, assets.LocalDDL); err != nil {
+	if _, err := db.ExecContext(ctx, ddl); err != nil {
 		db.Close()
 		slogger.ErrorContext(ctx, "Failed creating metadata database", "Error", err)
 		return nil, fmt.Errorf("couldnt create database: %w", err)
@@ -66,7 +70,8 @@ func FindGroupIDByServerID(ctx context.Context, db *sql.DB, serverID int) (uuid.
 	}
 
 	var groupID uuid.UUID
-	err := db.QueryRowContext(ctx, "SELECT group_id FROM servers WHERE server_id = ?", serverID).Scan(&groupID)
+	queries := metadata.New(db)
+	groupID, err := queries.FindGroupIDByServerID(ctx, serverID)
 	if err != nil {
 		slogger.ErrorContext(ctx, "Failed finding group id", "Error", err)
 		return uuid.Nil, fmt.Errorf("couldnt find group id: %w", err)
@@ -81,8 +86,11 @@ func AddServerToGroup(ctx context.Context, db *sql.DB, serverID int, groupID uui
 		slogger = slog.Default()
 	}
 
-	_, err := db.ExecContext(ctx, "INSERT INTO servers (server_id, output_channel, group_id, permission_level) VALUES (?, ?, ?, ?)", serverID, 69420, groupID.String(), 777)
-	if err != nil {
+	queries := metadata.New(db)
+	if err := queries.AddServerToGroup(ctx, metadata.AddServerToGroupParams{
+		GroupID:  groupID,
+		ServerID: serverID,
+	}); err != nil {
 		slogger.ErrorContext(ctx, "Failed adding server to group", "Error", err)
 		return fmt.Errorf("couldnt add server to group: %w", err)
 	}

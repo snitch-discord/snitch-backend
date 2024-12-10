@@ -10,3 +10,4 @@ CREATE TABLE IF NOT EXISTS servers (
     permission_level INTEGER NOT NULL,
     PRIMARY KEY (server_id, group_id)
 ) STRICT;
+

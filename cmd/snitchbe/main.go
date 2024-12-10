@@ -6,6 +6,7 @@ import (
 	"crypto/ed25519"
 	"crypto/x509"
 	"database/sql"
+	_ "embed"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -16,11 +17,12 @@ import (
 	"net/http"
 	"time"
 
-	"snitch/snitchbe/assets"
 	"snitch/snitchbe/internal/dbconfig"
 	"snitch/snitchbe/internal/group"
+	groupSQL "snitch/snitchbe/internal/group/db"
 	"snitch/snitchbe/internal/jwt"
 	"snitch/snitchbe/internal/metadata"
+	metadataSQL "snitch/snitchbe/internal/metadata/db"
 	"snitch/snitchbe/pkg/ctxutil"
 	"snitch/snitchbe/pkg/middleware"
 
@@ -45,29 +47,12 @@ func createReportHandler() http.HandlerFunc {
 				return
 			}
 
-			var reports []Report
+			queries := groupSQL.New(db)
 
-			query, err := db.QueryContext(r.Context(), "SELECT report_text, reporter_id, reported_user_id, origin_server_id FROM reports")
+			reports, err := queries.GetAllReports(r.Context())
+
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			defer query.Close()
-
-			for query.Next() {
-				var report Report
-				err := query.Scan(
-					&report.Text,
-					&report.ReporterID,
-					&report.ReportedUserID,
-					&report.ServerID,
-				)
-				if err != nil {
-					panic(err)
-				}
-				reports = append(reports, report)
-			}
-			if err = query.Err(); err != nil {
 				return
 			}
 			if err := json.NewEncoder(w).Encode(reports); err != nil {
@@ -187,6 +172,7 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, metadataD
 				panic(err)
 			}
 			newDb := sql.OpenDB(conn)
+
 			defer newDb.Close()
 
 			if err := newDb.PingContext(r.Context()); err != nil {
@@ -195,7 +181,7 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, metadataD
 				return
 			}
 
-			result, err := newDb.ExecContext(r.Context(), assets.RemoteDDL)
+			result, err := newDb.ExecContext(r.Context(), group.GroupDDL)
 			if err != nil {
 				slogger.Error("Create Table", "Error", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -203,16 +189,17 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, metadataD
 			}
 
 			slogger.InfoContext(r.Context(), "Create Table Result", "Result", result)
-
-			metadataResult, err := metadataDb.ExecContext(r.Context(), `INSERT INTO groups (group_id, group_name) VALUES (?, ?)`, groupID.String(), "we need the name lol")
-
-			if err != nil {
+			queries := metadataSQL.New(metadataDb)
+			if err := queries.InsertGroup(r.Context(), metadataSQL.InsertGroupParams{
+				GroupID:   groupID,
+				GroupName: "we need the name lol",
+			}); err != nil {
 				slogger.ErrorContext(r.Context(), "Insert Group to Metadata", "Error", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 
-			slogger.InfoContext(r.Context(), "Added Group to Metadata", "Result", metadataResult)
+			slogger.InfoContext(r.Context(), "Added Group to Metadata", "Result")
 
 			if err = json.NewEncoder(w).Encode(registrationResponse{ServerID: registrationRequest.ServerID, GroupID: groupID.String()}); err != nil {
 				slogger.Error("Encode Response", "Error", err)
