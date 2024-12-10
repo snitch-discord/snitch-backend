@@ -11,6 +11,7 @@ import (
 	"snitch/snitchbe/internal/libsqladmin"
 	"snitch/snitchbe/pkg/ctxutil"
 
+	"github.com/google/uuid"
 	"github.com/tursodatabase/libsql-client-go/libsql"
 )
 
@@ -56,4 +57,20 @@ func NewMetadataDB(ctx context.Context, tokenCache *jwt.TokenCache, config dbcon
 	}
 
 	return db, nil
+}
+
+func FindGroupIDByServerID(ctx context.Context, db *sql.DB, serverID string) (uuid.UUID, error) {
+	slogger, ok := ctxutil.Value[*slog.Logger](ctx)
+	if !ok {
+		slogger = slog.Default()
+	}
+
+	var groupID uuid.UUID
+	err := db.QueryRowContext(ctx, "SELECT group_id FROM servers WHERE server_id = ?", serverID).Scan(&groupID)
+	if err != nil {
+		slogger.ErrorContext(ctx, "Failed finding group id", "Error", err)
+		return uuid.Nil, fmt.Errorf("couldnt find group id: %w", err)
+	}
+
+	return groupID, nil
 }
