@@ -19,6 +19,7 @@ import (
 	"snitch/snitchbe/assets"
 	"snitch/snitchbe/internal/dbconfig"
 	"snitch/snitchbe/internal/jwt"
+	"snitch/snitchbe/internal/metadata"
 	"snitch/snitchbe/pkg/ctxutil"
 	"snitch/snitchbe/pkg/middleware"
 
@@ -97,7 +98,7 @@ type registrationResponse struct {
 	GroupID  string `json:"groupId"`
 }
 
-func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlConfig dbconfig.LibSQLConfig) http.HandlerFunc {
+func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, metadataDb *sql.DB, libSqlConfig dbconfig.LibSQLConfig) http.HandlerFunc {
 	libSQLAdminURL, err := libSqlConfig.AdminURL()
 	if err != nil {
 		panic(err)
@@ -191,6 +192,16 @@ func createRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 
 			slogger.InfoContext(r.Context(), "Create Table Result", "Result", result)
 
+			metadataResult, err := metadataDb.ExecContext(r.Context(), `INSERT INTO groups (group_id, group_name) VALUES (?, ?)`, groupID.String(), "we need the name lol")
+
+			if err != nil {
+				slogger.ErrorContext(r.Context(), "Insert Group to Metadata", "Error", err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			slogger.InfoContext(r.Context(), "Added Group to Metadata", "Result", metadataResult)
+
 			if err = json.NewEncoder(w).Encode(registrationResponse{ServerID: registrationRequest.ServerID, GroupID: groupID.String()}); err != nil {
 				slogger.Error("Encode Response", "Error", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -237,8 +248,18 @@ func main() {
 		panic(err)
 	}
 
+	metadataDb, err := metadata.NewMetadataDB(dbCtx, jwtCache, libSQLConfig)
+	if err != nil {
+		panic(err)
+	}
+	defer metadataDb.Close()
+
+	if err := metadataDb.PingContext(dbCtx); err != nil {
+		panic(err)
+	}
+
 	reportEndpointHandler := createReportHandler(db)
-	databaseEndpointHandler := createRegistrationHandler(jwtCache, db, libSQLConfig)
+	databaseEndpointHandler := createRegistrationHandler(jwtCache, db, metadataDb, libSQLConfig)
 
 	var handler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

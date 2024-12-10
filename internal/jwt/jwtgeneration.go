@@ -14,7 +14,7 @@ type TokenCache struct {
 	mutex sync.Mutex
 }
 
-func (tokenCache *TokenCache) set(token string) {
+func (tokenCache *TokenCache) Set(token string) {
 	tokenCache.mutex.Lock()
 	defer tokenCache.mutex.Unlock()
 	tokenCache.token = token
@@ -46,7 +46,7 @@ func startJwtTicker(interval time.Duration, tokenCache *TokenCache, jwtGenerator
 			slog.Error("Error generating token", "Error", err)
 			continue
 		}
-		tokenCache.set(token)
+		tokenCache.Set(token)
 	}
 }
 
@@ -56,7 +56,7 @@ func StartJwtGeneration(interval time.Duration, tokenCache *TokenCache, key ed25
 	if err != nil {
 		slog.Error("Error generating token", "Error", err)
 	}
-	tokenCache.set(firstToken)
-	
+	tokenCache.Set(firstToken)
+
 	go startJwtTicker(interval, tokenCache, jwtGenerator)
 }
