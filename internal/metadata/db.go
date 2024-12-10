@@ -59,7 +59,7 @@ func NewMetadataDB(ctx context.Context, tokenCache *jwt.TokenCache, config dbcon
 	return db, nil
 }
 
-func FindGroupIDByServerID(ctx context.Context, db *sql.DB, serverID string) (uuid.UUID, error) {
+func FindGroupIDByServerID(ctx context.Context, db *sql.DB, serverID int) (uuid.UUID, error) {
 	slogger, ok := ctxutil.Value[*slog.Logger](ctx)
 	if !ok {
 		slogger = slog.Default()
@@ -73,4 +73,19 @@ func FindGroupIDByServerID(ctx context.Context, db *sql.DB, serverID string) (uu
 	}
 
 	return groupID, nil
+}
+
+func AddServerToGroup(ctx context.Context, db *sql.DB, serverID int, groupID uuid.UUID) error {
+	slogger, ok := ctxutil.Value[*slog.Logger](ctx)
+	if !ok {
+		slogger = slog.Default()
+	}
+
+	_, err := db.ExecContext(ctx, "INSERT INTO servers (server_id, output_channel, group_id, permission_level) VALUES (?, ?, ?, ?)", serverID, 69420, groupID.String(), 777)
+	if err != nil {
+		slogger.ErrorContext(ctx, "Failed adding server to group", "Error", err)
+		return fmt.Errorf("couldnt add server to group: %w", err)
+	}
+
+	return nil
 }

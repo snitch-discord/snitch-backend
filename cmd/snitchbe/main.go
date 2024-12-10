@@ -18,6 +18,7 @@ import (
 
 	"snitch/snitchbe/assets"
 	"snitch/snitchbe/internal/dbconfig"
+	"snitch/snitchbe/internal/group"
 	"snitch/snitchbe/internal/jwt"
 	"snitch/snitchbe/internal/metadata"
 	"snitch/snitchbe/pkg/ctxutil"
@@ -34,34 +35,45 @@ type Report struct {
 	ServerID       int    `json:"serverId,string"`       // we need to tell go that our number is encoded as a string, hence ',string'
 }
 
-func createReportHandler(db *sql.DB) http.HandlerFunc {
+func createReportHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "GET":
-			// w.Header().Set("Content-Type", "application/json")
-			// var tournaments []Tournament
+			db, err := group.GetDB(r.Context())
+			if err != nil {
+				http.Error(w, "Database not available", http.StatusInternalServerError)
+				return
+			}
 
-			// statement := "SELECT * FROM competitions"
-			// rows, err := db.QueryContext(r.Context(), statement)
-			// if (err != nil) {
-			// 	http.Error(w, err.Error(), http.StatusInternalServerError)
-			// 	return
-			// }
+			var reports []Report
 
-			// for rows.Next() {
-			// 	var tournament Tournament
-			// 	var tournamentId int
+			query, err := db.QueryContext(r.Context(), "SELECT report_text, reporter_id, reported_user_id, origin_server_id FROM reports")
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			defer query.Close()
 
-			// 	err = rows.Scan(&tournamentId, &tournament.Name, &tournament.Type, &tournament.MaxParticipants, &tournament.RandomSeeds)
-
-			// 	if err != nil {
-			// 		break
-			// 	}
-
-			// 	tournaments = append(tournaments, tournament)
-			// }
-
-			// json.NewEncoder(w).Encode(tournaments)
+			for query.Next() {
+				var report Report
+				err := query.Scan(
+					&report.Text,
+					&report.ReporterID,
+					&report.ReportedUserID,
+					&report.ServerID,
+				)
+				if err != nil {
+					panic(err)
+				}
+				reports = append(reports, report)
+			}
+			if err = query.Err(); err != nil {
+				return
+			}
+			if err := json.NewEncoder(w).Encode(reports); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 		case "POST":
 			// w.Header().Set("Content-Type", "application/json")
 			// var tournament Tournament
@@ -257,8 +269,9 @@ func main() {
 	if err := metadataDb.PingContext(dbCtx); err != nil {
 		panic(err)
 	}
+	dbMiddleware := group.NewDBMiddleware(metadataDb, libSQLConfig, jwtCache)
 
-	reportEndpointHandler := createReportHandler(db)
+	reportEndpointHandler := createReportHandler()
 	databaseEndpointHandler := createRegistrationHandler(jwtCache, db, metadataDb, libSQLConfig)
 
 	var handler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {
@@ -266,7 +279,7 @@ func main() {
 		case "/databases":
 			databaseEndpointHandler(w, r)
 		case "/reports":
-			reportEndpointHandler(w, r)
+			dbMiddleware.Handler(reportEndpointHandler)(w, r)
 		default:
 			http.Error(w, "404 Not Found", http.StatusNotFound)
 		}
