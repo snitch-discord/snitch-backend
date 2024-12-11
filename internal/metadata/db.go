@@ -9,15 +9,14 @@ import (
 	"snitch/snitchbe/internal/dbconfig"
 	"snitch/snitchbe/internal/jwt"
 	"snitch/snitchbe/internal/libsqladmin"
-	metadata "snitch/snitchbe/internal/metadata/db"
+	metadataDB "snitch/snitchbe/internal/metadata/db"
+	metadataSQL "snitch/snitchbe/internal/metadata/sql"
+
 	"snitch/snitchbe/pkg/ctxutil"
 
 	"github.com/google/uuid"
 	"github.com/tursodatabase/libsql-client-go/libsql"
 )
-
-//go:embed sql/schema.sql
-var ddl string
 
 func NewMetadataDB(ctx context.Context, tokenCache *jwt.TokenCache, config dbconfig.LibSQLConfig) (*sql.DB, error) {
 	slogger, ok := ctxutil.Value[*slog.Logger](ctx)
@@ -54,7 +53,7 @@ func NewMetadataDB(ctx context.Context, tokenCache *jwt.TokenCache, config dbcon
 	}
 
 	db := sql.OpenDB(connector)
-	if _, err := db.ExecContext(ctx, ddl); err != nil {
+	if _, err := db.ExecContext(ctx, metadataSQL.MetadataSchema); err != nil {
 		db.Close()
 		slogger.ErrorContext(ctx, "Failed creating metadata database", "Error", err)
 		return nil, fmt.Errorf("couldnt create database: %w", err)
@@ -70,7 +69,7 @@ func FindGroupIDByServerID(ctx context.Context, db *sql.DB, serverID int) (uuid.
 	}
 
 	var groupID uuid.UUID
-	queries := metadata.New(db)
+	queries := metadataDB.New(db)
 	groupID, err := queries.FindGroupIDByServerID(ctx, serverID)
 	if err != nil {
 		slogger.ErrorContext(ctx, "Failed finding group id", "Error", err)
@@ -86,8 +85,8 @@ func AddServerToGroup(ctx context.Context, db *sql.DB, serverID int, groupID uui
 		slogger = slog.Default()
 	}
 
-	queries := metadata.New(db)
-	if err := queries.AddServerToGroup(ctx, metadata.AddServerToGroupParams{
+	queries := metadataDB.New(db)
+	if err := queries.AddServerToGroup(ctx, metadataDB.AddServerToGroupParams{
 		GroupID:  groupID,
 		ServerID: serverID,
 	}); err != nil {
