@@ -17,8 +17,8 @@ type contextKey string
 
 const (
 	ServerIDHeader     = "X-Server-ID"
-	dbContextKey       = contextKey("db")
 	serverIDContextKey = contextKey("server_id")
+	groupIDContextKey  = contextKey("group_id")
 )
 
 type DBMiddleware struct {
@@ -75,26 +75,12 @@ func (m *DBMiddleware) Handler(next http.HandlerFunc) http.HandlerFunc {
 			http.Error(w, "Server not found", http.StatusNotFound)
 			return
 		}
-		db, err := m.connectToDB(r.Context(), groupID.String())
-		if err != nil {
-			http.Error(w, "Failed to connect to database", http.StatusInternalServerError)
-			return
-		}
-		defer db.Close()
 
-		ctx := context.WithValue(r.Context(), dbContextKey, db)
-		ctx = context.WithValue(ctx, serverIDContextKey, serverID)
+		ctx := context.WithValue(r.Context(), serverIDContextKey, serverID)
+		ctx = context.WithValue(ctx, groupIDContextKey, groupID)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	}
-}
-
-func GetDB(ctx context.Context) (*sql.DB, error) {
-	db, ok := ctx.Value(dbContextKey).(*sql.DB)
-	if !ok {
-		return nil, fmt.Errorf("database not found in context")
-	}
-	return db, nil
 }
 
 func GetServerID(ctx context.Context) (int, error) {
@@ -104,4 +90,3 @@ func GetServerID(ctx context.Context) (int, error) {
 	}
 	return serverID, nil
 }
-
