@@ -15,7 +15,7 @@ var publicKey, privateKey, _ = ed25519.GenerateKey(rand.Reader)
 func TestTokenAvailability(t *testing.T) {
 	jwtDuration := time.Minute
 	jwtCache := &snitchbe_jwt.TokenCache{}
-	snitchbe_jwt.StartJwtGeneration(jwtDuration, jwtCache, privateKey)
+	snitchbe_jwt.StartGenerator(jwtDuration, jwtCache, privateKey)
 
 	if jwtCache.Get() == "" {
 		t.Error("Token cache empty")
@@ -25,7 +25,7 @@ func TestTokenAvailability(t *testing.T) {
 func TestTokenDecode(t *testing.T) {
 	jwtDuration := time.Minute
 	jwtCache := &snitchbe_jwt.TokenCache{}
-	snitchbe_jwt.StartJwtGeneration(jwtDuration, jwtCache, privateKey)
+	snitchbe_jwt.StartGenerator(jwtDuration, jwtCache, privateKey)
 	
 	tokenString := jwtCache.Get()
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {

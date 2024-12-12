@@ -86,7 +86,7 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 					return
 				}
 
-				exists, err := libsqladmin.DoesNamespaceExist(groupID.String(), r.Context(), tokenCache, libSqlConfig)
+				exists, err := libsqladmin.DoesNamespaceExist(groupID.String(), r.Context(), tokenCache.Get(), libSqlConfig)
 				if err != nil {
 					slogger.ErrorContext(r.Context(), "Failed checking if namespace exists", "Error", err)
 					http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -135,7 +135,7 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 				}
 
 				groupID = uuid.New()
-				exists, err := libsqladmin.DoesNamespaceExist(groupID.String(), r.Context(), tokenCache, libSqlConfig)
+				exists, err := libsqladmin.DoesNamespaceExist(groupID.String(), r.Context(), tokenCache.Get(), libSqlConfig)
 				if err != nil {
 					slogger.ErrorContext(r.Context(), "Failed checking if namespace exists", "Error", err)
 					http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -143,7 +143,7 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 				}
 
 				if !exists {
-					if err := libsqladmin.CreateNamespace(groupID.String(), r.Context(), tokenCache, libSqlConfig); err != nil {
+					if err := libsqladmin.CreateNamespace(groupID.String(), r.Context(), tokenCache.Get(), libSqlConfig); err != nil {
 						slogger.ErrorContext(r.Context(), "Failed creating namespace", "Error", err)
 						http.Error(w, err.Error(), http.StatusInternalServerError)
 						return

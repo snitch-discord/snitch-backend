@@ -7,11 +7,10 @@ import (
 	"log/slog"
 	"net/http"
 	"snitch/snitchbe/internal/dbconfig"
-	"snitch/snitchbe/internal/jwt"
 	"snitch/snitchbe/pkg/ctxutil"
 )
 
-func CreateNamespace(name string, ctx context.Context, tokenCache *jwt.TokenCache, config dbconfig.LibSQLConfig) error {
+func CreateNamespace(name string, ctx context.Context, token string, config dbconfig.LibSQLConfig) error {
 	slogger, ok := ctxutil.Value[*slog.Logger](ctx)
 	if !ok {
 		slogger = slog.Default()
@@ -31,7 +30,7 @@ func CreateNamespace(name string, ctx context.Context, tokenCache *jwt.TokenCach
 		return err
 	}
 
-	request.Header.Set("Authorization", "Bearer "+tokenCache.Get())
+	request.Header.Set("Authorization", "Bearer "+token)
 	request.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(request)
@@ -49,7 +48,7 @@ func CreateNamespace(name string, ctx context.Context, tokenCache *jwt.TokenCach
 	return nil
 }
 
-func DoesNamespaceExist(name string, ctx context.Context, tokenCache *jwt.TokenCache, config dbconfig.LibSQLConfig) (bool, error) {
+func DoesNamespaceExist(name string, ctx context.Context, token string, config dbconfig.LibSQLConfig) (bool, error) {
 	slogger, ok := ctxutil.Value[*slog.Logger](ctx)
 	if !ok {
 		slogger = slog.Default()
@@ -69,7 +68,7 @@ func DoesNamespaceExist(name string, ctx context.Context, tokenCache *jwt.TokenC
 		return false, err
 	}
 
-	request.Header.Set("Authorization", "Bearer "+tokenCache.Get())
+	request.Header.Set("Authorization", "Bearer "+token)
 
 	resp, err := http.DefaultClient.Do(request)
 	if err != nil {

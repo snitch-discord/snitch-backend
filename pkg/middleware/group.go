@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"snitch/snitchbe/internal/dbconfig"
-	"snitch/snitchbe/internal/jwt"
 	"snitch/snitchbe/internal/metadata"
 	"strconv"
 )
@@ -22,14 +21,14 @@ const (
 type DBMiddleware struct {
 	metadataDB *sql.DB
 	config     dbconfig.LibSQLConfig
-	tokenCache *jwt.TokenCache
+	token      string
 }
 
-func NewDBMiddleware(metadataDB *sql.DB, config dbconfig.LibSQLConfig, tokenCache *jwt.TokenCache) *DBMiddleware {
+func NewDBMiddleware(metadataDB *sql.DB, config dbconfig.LibSQLConfig, token string) *DBMiddleware {
 	return &DBMiddleware{
 		metadataDB: metadataDB,
 		config:     config,
-		tokenCache: tokenCache,
+		token:      token,
 	}
 }
 
@@ -38,6 +37,7 @@ func (m *DBMiddleware) getServerID(r *http.Request) (int, error) {
 	if serverIDStr == "" {
 		return 0, fmt.Errorf("server ID header is required")
 	}
+
 	serverID, err := strconv.Atoi(serverIDStr)
 	if err != nil {
 		return 0, fmt.Errorf("invalid server ID format")

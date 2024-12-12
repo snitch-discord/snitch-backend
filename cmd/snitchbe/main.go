@@ -35,12 +35,17 @@ func main() {
 
 	jwtDuration := 10 * time.Minute
 	jwtCache := &jwt.TokenCache{}
-	jwt.StartJwtGeneration(jwtDuration, jwtCache, key)
+	jwt.StartGenerator(jwtDuration, jwtCache, key)
+	
+	dbJwt, err := jwt.CreateToken(key)
+	if err != nil {
+		panic(err)
+	}
 
 	dbCtx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
-	metadataDb, err := metadata.NewMetadataDB(dbCtx, jwtCache, libSQLConfig)
+	metadataDb, err := metadata.NewMetadataDB(dbCtx, dbJwt, libSQLConfig)
 	if err != nil {
 		panic(err)
 	}
@@ -49,9 +54,8 @@ func main() {
 	if err := metadataDb.PingContext(dbCtx); err != nil {
 		panic(err)
 	}
-	dbMiddleware := middleware.NewDBMiddleware(metadataDb, libSQLConfig, jwtCache)
+	dbMiddleware := middleware.NewDBMiddleware(metadataDb, libSQLConfig, dbJwt)
 	reportEndpointHandler := handler.CreateReportHandler(jwtCache, libSQLConfig)
-
 	databaseEndpointHandler := handler.CreateRegistrationHandler(jwtCache, metadataDb, libSQLConfig)
 
 	var handler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {

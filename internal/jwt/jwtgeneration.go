@@ -26,17 +26,20 @@ func (tokenCache *TokenCache) Get() string {
 	return tokenCache.token
 }
 
-func createJwtGenerator(key ed25519.PrivateKey) func(time.Duration) (string, error) {
-	return func(duration time.Duration) (string, error) {
+func CreateToken(key ed25519.PrivateKey) (string, error) {
+	token := jwt.New(jwt.SigningMethodEdDSA)
+	return token.SignedString(key)
+}
+
+func createTimedToken(key ed25519.PrivateKey, duration time.Duration) (string, error) {
 		token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{
 			"exp": time.Now().Add(duration).Unix(),
 		})
 
 		return token.SignedString(key)
-	}
 }
 
-func startJwtTicker(interval time.Duration, tokenCache *TokenCache, jwtGenerator func(time.Duration) (string, error)) {
+func startTicker(interval time.Duration, tokenCache *TokenCache, jwtGenerator func(time.Duration) (string, error)) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -50,13 +53,13 @@ func startJwtTicker(interval time.Duration, tokenCache *TokenCache, jwtGenerator
 	}
 }
 
-func StartJwtGeneration(interval time.Duration, tokenCache *TokenCache, key ed25519.PrivateKey) {
-	jwtGenerator := createJwtGenerator(key)
+func StartGenerator(interval time.Duration, tokenCache *TokenCache, key ed25519.PrivateKey) {
+	jwtGenerator := func(time.Duration) (string, error) { return createTimedToken(key, interval) }
 	firstToken, err := jwtGenerator(interval)
 	if err != nil {
 		slog.Error("Error generating token", "Error", err)
 	}
 	tokenCache.Set(firstToken)
 
-	go startJwtTicker(interval, tokenCache, jwtGenerator)
+	go startTicker(interval, tokenCache, jwtGenerator)
 }
