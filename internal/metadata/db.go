@@ -53,7 +53,7 @@ func NewMetadataDB(ctx context.Context, token string, config dbconfig.LibSQLConf
 
 	db := sql.OpenDB(connector)
 	if _, err := db.ExecContext(ctx, metadataSQL.MetadataSchema); err != nil {
-		db.Close()
+		defer db.Close()
 		slogger.ErrorContext(ctx, "Failed creating metadata database", "Error", err)
 		return nil, fmt.Errorf("couldnt create database: %w", err)
 	}

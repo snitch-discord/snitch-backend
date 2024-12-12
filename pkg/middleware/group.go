@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
-	"snitch/snitchbe/internal/dbconfig"
 	"snitch/snitchbe/internal/metadata"
 	"strconv"
 )
@@ -18,21 +17,7 @@ const (
 	groupIDContextKey  = contextKey("group_id")
 )
 
-type DBMiddleware struct {
-	metadataDB *sql.DB
-	config     dbconfig.LibSQLConfig
-	token      string
-}
-
-func NewDBMiddleware(metadataDB *sql.DB, config dbconfig.LibSQLConfig, token string) *DBMiddleware {
-	return &DBMiddleware{
-		metadataDB: metadataDB,
-		config:     config,
-		token:      token,
-	}
-}
-
-func (m *DBMiddleware) getServerID(r *http.Request) (int, error) {
+func getServerID(r *http.Request) (int, error) {
 	serverIDStr := r.Header.Get(ServerIDHeader)
 	if serverIDStr == "" {
 		return 0, fmt.Errorf("server ID header is required")
@@ -45,14 +30,14 @@ func (m *DBMiddleware) getServerID(r *http.Request) (int, error) {
 	return serverID, nil
 }
 
-func (m *DBMiddleware) Handler(next http.HandlerFunc) http.HandlerFunc {
+func GroupContext(next http.HandlerFunc, metadataDB *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		serverID, err := m.getServerID(r)
+		serverID, err := getServerID(r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		groupID, err := metadata.FindGroupIDByServerID(r.Context(), m.metadataDB, serverID)
+		groupID, err := metadata.FindGroupIDByServerID(r.Context(), metadataDB, serverID)
 		if err != nil {
 			http.Error(w, "Server not found", http.StatusNotFound)
 			return

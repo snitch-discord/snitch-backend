@@ -94,12 +94,6 @@ func CreateReportHandler(tokenCache *jwt.TokenCache, libSqlConfig dbconfig.LibSQ
 				return
 			}
 
-			if err != nil {
-				slogger.Error("failed to get server id", "Error", err)
-				http.Error(w, "Server ID not available", http.StatusInternalServerError)
-				return
-			}
-
 			reportID, err := queries.CreateReport(r.Context(), groupDB.CreateReportParams{
 				OriginServerID: serverID,
 				ReportText:     reportRequest.ReportText,

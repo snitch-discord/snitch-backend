@@ -54,7 +54,7 @@ func main() {
 	if err := metadataDb.PingContext(dbCtx); err != nil {
 		panic(err)
 	}
-	dbMiddleware := middleware.NewDBMiddleware(metadataDb, libSQLConfig, dbJwt)
+
 	reportEndpointHandler := handler.CreateReportHandler(jwtCache, libSQLConfig)
 	databaseEndpointHandler := handler.CreateRegistrationHandler(jwtCache, metadataDb, libSQLConfig)
 
@@ -63,13 +63,14 @@ func main() {
 		case "/databases":
 			databaseEndpointHandler(w, r)
 		case "/reports":
-			dbMiddleware.Handler(reportEndpointHandler)(w, r)
+			reportEndpointHandler(w, r)
 		default:
 			http.Error(w, "404 Not Found", http.StatusNotFound)
 		}
 	}
 
 	handler = middleware.RecordResponse(handler)
+	handler = middleware.GroupContext(handler, metadataDb)
 	handler = middleware.Recovery(handler)
 	handler = middleware.PermissiveCORSHandler(handler)
 	handler = middleware.Log(handler)
