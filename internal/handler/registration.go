@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"snitch/snitchbe/internal/dbconfig"
+	groupDB "snitch/snitchbe/internal/group/db"
 	groupSQL "snitch/snitchbe/internal/group/sql"
 	"snitch/snitchbe/internal/libsqladmin"
 	"strconv"
@@ -20,7 +21,6 @@ import (
 )
 
 type registrationRequest struct {
-	ServerID  int    `json:"serverId,string"`
 	UserID    int    `json:"userId,string"`
 	GroupID   string `json:"groupId,omitempty"`
 	GroupName string `json:"groupName,omitempty"`
@@ -97,11 +97,32 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 					return
 				}
 
+				conn, err := libsql.NewConnector(
+					fmt.Sprintf("http://%s.%s", groupID.String(), "db"),
+					libsql.WithProxy(libSQLHttpURL.String()),
+					libsql.WithAuthToken(tokenCache.Get()),
+				)
+				if err != nil {
+					slogger.ErrorContext(r.Context(), "Failed creating database connector", "Error", err)
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+
+				newDb := sql.OpenDB(conn)
+				defer newDb.Close()
+
+				groupQueries := groupDB.New(newDb)
+
 				if err := queries.AddServerToGroup(r.Context(), metadataDB.AddServerToGroupParams{
 					GroupID:  groupID,
 					ServerID: serverID,
 				}); err != nil {
 					slogger.ErrorContext(r.Context(), "Failed adding server to group metadata", "Error", err)
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				if err := groupQueries.AddServer(r.Context(), serverID); err != nil {
+					slogger.ErrorContext(r.Context(), "Failed adding server to group", "Error", err)
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
 				}
@@ -143,6 +164,8 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 				newDb := sql.OpenDB(conn)
 				defer newDb.Close()
 
+				groupQueries := groupDB.New(newDb)
+
 				if err := newDb.PingContext(r.Context()); err != nil {
 					slogger.Error("Ping Database", "Error", err)
 					http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -169,6 +192,12 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 					ServerID: serverID,
 				}); err != nil {
 					slogger.ErrorContext(r.Context(), "Failed adding server to group metadata", "Error", err)
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+
+				if err := groupQueries.AddServer(r.Context(), serverID); err != nil {
+					slogger.ErrorContext(r.Context(), "Failed adding server to group", "Error", err)
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
 				}

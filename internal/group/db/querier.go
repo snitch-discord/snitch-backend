@@ -9,7 +9,9 @@ import (
 )
 
 type Querier interface {
-	CreateAllTables(ctx context.Context) error
+	AddServer(ctx context.Context, serverID int) error
+	AddUser(ctx context.Context, userID int) error
+	CreateReport(ctx context.Context, arg CreateReportParams) (int, error)
 	GetAllReports(ctx context.Context) ([]GetAllReportsRow, error)
 }
 

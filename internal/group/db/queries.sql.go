@@ -9,15 +9,55 @@ import (
 	"context"
 )
 
-const createAllTables = `-- name: CreateAllTables :exec
-CREATE TABLE IF NOT EXISTS users (
-    user_id INTEGER PRIMARY KEY
-) STRICT
+const addServer = `-- name: AddServer :exec
+INSERT INTO servers (
+    server_id
+) VALUES (?)
 `
 
-func (q *Queries) CreateAllTables(ctx context.Context) error {
-	_, err := q.exec(ctx, q.createAllTablesStmt, createAllTables)
+func (q *Queries) AddServer(ctx context.Context, serverID int) error {
+	_, err := q.exec(ctx, q.addServerStmt, addServer, serverID)
 	return err
+}
+
+const addUser = `-- name: AddUser :exec
+INSERT OR IGNORE INTO users (
+    user_id
+) VALUES (?)
+`
+
+func (q *Queries) AddUser(ctx context.Context, userID int) error {
+	_, err := q.exec(ctx, q.addUserStmt, addUser, userID)
+	return err
+}
+
+const createReport = `-- name: CreateReport :one
+INSERT INTO reports (
+    report_text,
+    reporter_id, 
+    reported_user_id,
+    origin_server_id
+) values (?, ?, ?, ?)
+RETURNING report_id
+`
+
+type CreateReportParams struct {
+	ReportText     string `json:"report_text"`
+	ReporterID     int    `json:"reporter_id"`
+	ReportedUserID int    `json:"reported_user_id"`
+	OriginServerID int    `json:"origin_server_id"`
+}
+
+func (q *Queries) CreateReport(ctx context.Context, arg CreateReportParams) (int, error) {
+	row := q.queryRow(ctx, q.createReportStmt, createReport,
+		arg.ReportText,
+		arg.ReporterID,
+		arg.ReportedUserID,
+		arg.OriginServerID,
+	)
+	var report_id int
+	err := row.Scan(&report_id)
+	return report_id, err
 }
 
 const getAllReports = `-- name: GetAllReports :many

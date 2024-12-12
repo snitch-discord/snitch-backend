@@ -60,7 +60,6 @@ func DoesNamespaceExist(name string, ctx context.Context, tokenCache *jwt.TokenC
 		return false, err
 	}
 
-	fmt.Println("name: " + name)
 	request, err := http.NewRequestWithContext(ctx, "GET",
 		adminURL.JoinPath(fmt.Sprintf("v1/namespaces/%s/config", name)).String(),
 		nil)

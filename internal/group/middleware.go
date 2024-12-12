@@ -13,11 +13,12 @@ import (
 	"github.com/tursodatabase/libsql-client-go/libsql"
 )
 
-type DatabaseContext string
+type contextKey string
 
 const (
-	ServerIDHeader = "X-Server-ID"
-	DBContextKey   = DatabaseContext("db")
+	ServerIDHeader     = "X-Server-ID"
+	dbContextKey       = contextKey("db")
+	serverIDContextKey = contextKey("server_id")
 )
 
 type DBMiddleware struct {
@@ -39,12 +40,10 @@ func (m *DBMiddleware) getServerID(r *http.Request) (int, error) {
 	if serverIDStr == "" {
 		return 0, fmt.Errorf("server ID header is required")
 	}
-
 	serverID, err := strconv.Atoi(serverIDStr)
 	if err != nil {
 		return 0, fmt.Errorf("invalid server ID format")
 	}
-
 	return serverID, nil
 }
 
@@ -53,7 +52,6 @@ func (m *DBMiddleware) connectToDB(ctx context.Context, groupID string) (*sql.DB
 	if err != nil {
 		return nil, fmt.Errorf("failed to get HTTP URL: %w", err)
 	}
-
 	connector, err := libsql.NewConnector(
 		fmt.Sprintf("http://%s.%s", groupID, "db"),
 		libsql.WithProxy(httpURL.String()),
@@ -62,7 +60,6 @@ func (m *DBMiddleware) connectToDB(ctx context.Context, groupID string) (*sql.DB
 	if err != nil {
 		return nil, fmt.Errorf("failed to create connector: %w", err)
 	}
-
 	return sql.OpenDB(connector), nil
 }
 
@@ -73,13 +70,11 @@ func (m *DBMiddleware) Handler(next http.HandlerFunc) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-
 		groupID, err := metadata.FindGroupIDByServerID(r.Context(), m.metadataDB, serverID)
 		if err != nil {
 			http.Error(w, "Server not found", http.StatusNotFound)
 			return
 		}
-
 		db, err := m.connectToDB(r.Context(), groupID.String())
 		if err != nil {
 			http.Error(w, "Failed to connect to database", http.StatusInternalServerError)
@@ -87,15 +82,26 @@ func (m *DBMiddleware) Handler(next http.HandlerFunc) http.HandlerFunc {
 		}
 		defer db.Close()
 
-		ctx := context.WithValue(r.Context(), DBContextKey, db)
+		ctx := context.WithValue(r.Context(), dbContextKey, db)
+		ctx = context.WithValue(ctx, serverIDContextKey, serverID)
+
 		next.ServeHTTP(w, r.WithContext(ctx))
 	}
 }
 
 func GetDB(ctx context.Context) (*sql.DB, error) {
-	db, ok := ctx.Value(DBContextKey).(*sql.DB)
+	db, ok := ctx.Value(dbContextKey).(*sql.DB)
 	if !ok {
 		return nil, fmt.Errorf("database not found in context")
 	}
 	return db, nil
 }
+
+func GetServerID(ctx context.Context) (int, error) {
+	serverID, ok := ctx.Value(serverIDContextKey).(int)
+	if !ok {
+		return 0, fmt.Errorf("server ID not found in context")
+	}
+	return serverID, nil
+}
+
