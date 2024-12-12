@@ -1,13 +1,18 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"snitch/snitchbe/internal/dbconfig"
 	"snitch/snitchbe/internal/group"
 	groupDB "snitch/snitchbe/internal/group/db"
+	"snitch/snitchbe/internal/jwt"
 	"snitch/snitchbe/pkg/ctxutil"
+	"snitch/snitchbe/pkg/middleware"
+	"time"
 )
 
 type reportRequest struct {
@@ -16,22 +21,36 @@ type reportRequest struct {
 	ReportedUserID int    `json:"reportedUserId,string"`
 }
 
-func CreateReportHandler() http.HandlerFunc {
+func CreateReportHandler(tokenCache *jwt.TokenCache, libSqlConfig dbconfig.LibSQLConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		slogger, ok := ctxutil.Value[*slog.Logger](r.Context())
 		if !ok {
 			slogger = slog.Default()
 		}
+		ctx, cancel := context.WithTimeout(r.Context(), time.Second*5)
+		defer cancel()
+
+		serverID, err := middleware.GetServerID(ctx)
+		if err != nil {
+			slogger.Error("Couldn't get server id", "Error", err)
+			http.Error(w, "Server ID not available", http.StatusInternalServerError)
+			return
+		}
+		groupID, err := middleware.GetGroupID(ctx)
+		if err != nil {
+			slogger.Error("Couldn't get group id", "Error", err)
+			http.Error(w, "Group ID not available", http.StatusInternalServerError)
+			return
+		}
 
 		switch r.Method {
 		case "GET":
-			db, err := group.GetDB(r.Context())
+			db, err := group.NewGroupDB(ctx, tokenCache, libSqlConfig, groupID)
 			if err != nil {
-				slogger.Error("failed to get db", "Error", err)
-				http.Error(w, "Database not available", http.StatusInternalServerError)
+				slogger.Error("Failed creating group db", "Error", err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-
 			queries := groupDB.New(db)
 
 			reports, err := queries.GetAllReports(r.Context())
@@ -54,29 +73,27 @@ func CreateReportHandler() http.HandlerFunc {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-
-			db, err := group.GetDB(r.Context())
-
+			db, err := group.NewGroupDB(ctx, tokenCache, libSqlConfig, groupID)
 			if err != nil {
-				slogger.Error("failed to get db", "Error", err)
-				http.Error(w, "Database not available", http.StatusInternalServerError)
+				slogger.Error("Failed creating group db", "Error", err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
+
 			queries := groupDB.New(db)
 
-			if err := queries.AddUser(r.Context(), reportRequest.ReportedUserID); err != nil {
+			if err := queries.AddUser(ctx, reportRequest.ReportedUserID); err != nil {
 				slogger.Error(fmt.Sprintf("failed to add user %d", reportRequest.ReportedUserID), "Error", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 
-			if err := queries.AddUser(r.Context(), reportRequest.ReporterID); err != nil {
+			if err := queries.AddUser(ctx, reportRequest.ReporterID); err != nil {
 				slogger.Error(fmt.Sprintf("failed to add user %d", reportRequest.ReporterID), "Error", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 
-			serverID, err := group.GetServerID(r.Context())
 			if err != nil {
 				slogger.Error("failed to get server id", "Error", err)
 				http.Error(w, "Server ID not available", http.StatusInternalServerError)

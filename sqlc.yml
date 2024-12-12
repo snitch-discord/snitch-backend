@@ -18,7 +18,7 @@ sql:
     schema: "./internal/group/sql/schema.sql"
     gen:
       go:
-        package: "group"
+        package: "sqlc"
         out: "./internal/group/db"
         emit_json_tags: true
         emit_prepared_queries: true
@@ -30,7 +30,7 @@ sql:
     schema: "./internal/metadata/sql/schema.sql"
     gen:
       go:
-        package: "metadata"
+        package: "sqlc"
         out: "./internal/metadata/db"
         emit_json_tags: true
         emit_prepared_queries: true

@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"snitch/snitchbe/internal/dbconfig"
-	"snitch/snitchbe/internal/group"
 	"snitch/snitchbe/internal/handler"
 	"snitch/snitchbe/internal/jwt"
 	"snitch/snitchbe/internal/metadata"
@@ -50,9 +49,9 @@ func main() {
 	if err := metadataDb.PingContext(dbCtx); err != nil {
 		panic(err)
 	}
-	dbMiddleware := group.NewDBMiddleware(metadataDb, libSQLConfig, jwtCache)
+	dbMiddleware := middleware.NewDBMiddleware(metadataDb, libSQLConfig, jwtCache)
+	reportEndpointHandler := handler.CreateReportHandler(jwtCache, libSQLConfig)
 
-	reportEndpointHandler := handler.CreateReportHandler()
 	databaseEndpointHandler := handler.CreateRegistrationHandler(jwtCache, metadataDb, libSQLConfig)
 
 	var handler http.HandlerFunc = func(w http.ResponseWriter, r *http.Request) {

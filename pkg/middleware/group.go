@@ -1,4 +1,4 @@
-package group
+package middleware
 
 import (
 	"context"
@@ -9,8 +9,6 @@ import (
 	"snitch/snitchbe/internal/jwt"
 	"snitch/snitchbe/internal/metadata"
 	"strconv"
-
-	"github.com/tursodatabase/libsql-client-go/libsql"
 )
 
 type contextKey string
@@ -47,22 +45,6 @@ func (m *DBMiddleware) getServerID(r *http.Request) (int, error) {
 	return serverID, nil
 }
 
-func (m *DBMiddleware) connectToDB(ctx context.Context, groupID string) (*sql.DB, error) {
-	httpURL, err := m.config.HttpURL()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get HTTP URL: %w", err)
-	}
-	connector, err := libsql.NewConnector(
-		fmt.Sprintf("http://%s.%s", groupID, "db"),
-		libsql.WithProxy(httpURL.String()),
-		libsql.WithAuthToken(m.tokenCache.Get()),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create connector: %w", err)
-	}
-	return sql.OpenDB(connector), nil
-}
-
 func (m *DBMiddleware) Handler(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		serverID, err := m.getServerID(r)
@@ -77,7 +59,7 @@ func (m *DBMiddleware) Handler(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		ctx := context.WithValue(r.Context(), serverIDContextKey, serverID)
-		ctx = context.WithValue(ctx, groupIDContextKey, groupID)
+		ctx = context.WithValue(ctx, groupIDContextKey, groupID.String())
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	}
@@ -89,4 +71,12 @@ func GetServerID(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("server ID not found in context")
 	}
 	return serverID, nil
+}
+
+func GetGroupID(ctx context.Context) (string, error) {
+	groupID, ok := ctx.Value(groupIDContextKey).(string)
+	if !ok {
+		return "", fmt.Errorf("group ID not found in context")
+	}
+	return groupID, nil
 }

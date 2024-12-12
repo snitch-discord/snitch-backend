@@ -2,7 +2,7 @@
 // versions:
 //   sqlc v1.26.0
 
-package group
+package sqlc
 
 type Report struct {
 	ReportID       int    `json:"report_id"`
