@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"snitch/snitchbe/internal/dbconfig"
 	"snitch/snitchbe/internal/group"
-	groupDB "snitch/snitchbe/internal/group/db"
+	groupSQLc "snitch/snitchbe/internal/group/sqlc"
 	"snitch/snitchbe/internal/jwt"
 	"snitch/snitchbe/pkg/ctxutil"
 	"snitch/snitchbe/pkg/middleware"
@@ -51,7 +51,7 @@ func CreateReportHandler(tokenCache *jwt.TokenCache, libSqlConfig dbconfig.LibSQ
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			queries := groupDB.New(db)
+			queries := groupSQLc.New(db)
 
 			reports, err := queries.GetAllReports(r.Context())
 
@@ -80,7 +80,7 @@ func CreateReportHandler(tokenCache *jwt.TokenCache, libSqlConfig dbconfig.LibSQ
 				return
 			}
 
-			queries := groupDB.New(db)
+			queries := groupSQLc.New(db)
 
 			if err := queries.AddUser(ctx, reportRequest.ReportedUserID); err != nil {
 				slogger.Error(fmt.Sprintf("failed to add user %d", reportRequest.ReportedUserID), "Error", err)
@@ -94,7 +94,7 @@ func CreateReportHandler(tokenCache *jwt.TokenCache, libSqlConfig dbconfig.LibSQ
 				return
 			}
 
-			reportID, err := queries.CreateReport(r.Context(), groupDB.CreateReportParams{
+			reportID, err := queries.CreateReport(r.Context(), groupSQLc.CreateReportParams{
 				OriginServerID: serverID,
 				ReportText:     reportRequest.ReportText,
 				ReporterID:     reportRequest.ReporterID,

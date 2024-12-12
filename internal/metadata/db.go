@@ -8,8 +8,8 @@ import (
 	"log/slog"
 	"snitch/snitchbe/internal/dbconfig"
 	"snitch/snitchbe/internal/libsqladmin"
-	sqlc "snitch/snitchbe/internal/metadata/db"
 	metadataSQL "snitch/snitchbe/internal/metadata/sql"
+	"snitch/snitchbe/internal/metadata/sqlc"
 
 	"snitch/snitchbe/pkg/ctxutil"
 

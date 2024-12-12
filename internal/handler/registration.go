@@ -7,13 +7,13 @@ import (
 	"log/slog"
 	"net/http"
 	"snitch/snitchbe/internal/dbconfig"
-	groupDB "snitch/snitchbe/internal/group/db"
 	groupSQL "snitch/snitchbe/internal/group/sql"
+	groupSQLc "snitch/snitchbe/internal/group/sqlc"
 	"snitch/snitchbe/internal/libsqladmin"
 	"strconv"
 
 	"snitch/snitchbe/internal/jwt"
-	metadataDB "snitch/snitchbe/internal/metadata/db"
+	metadataSQLc "snitch/snitchbe/internal/metadata/sqlc"
 	"snitch/snitchbe/pkg/ctxutil"
 
 	"github.com/google/uuid"
@@ -75,7 +75,7 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 				return
 			}
 
-			queries := metadataDB.New(db)
+			queries := metadataSQLc.New(db)
 			var groupID uuid.UUID
 
 			if registrationRequest.GroupID != "" {
@@ -111,9 +111,9 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 				newDb := sql.OpenDB(conn)
 				defer newDb.Close()
 
-				groupQueries := groupDB.New(newDb)
+				groupQueries := groupSQLc.New(newDb)
 
-				if err := queries.AddServerToGroup(r.Context(), metadataDB.AddServerToGroupParams{
+				if err := queries.AddServerToGroup(r.Context(), metadataSQLc.AddServerToGroupParams{
 					GroupID:  groupID,
 					ServerID: serverID,
 				}); err != nil {
@@ -164,7 +164,7 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 				newDb := sql.OpenDB(conn)
 				defer newDb.Close()
 
-				groupQueries := groupDB.New(newDb)
+				groupQueries := groupSQLc.New(newDb)
 
 				if err := newDb.PingContext(r.Context()); err != nil {
 					slogger.Error("Ping Database", "Error", err)
@@ -178,7 +178,7 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 					return
 				}
 
-				if err := queries.InsertGroup(r.Context(), metadataDB.InsertGroupParams{
+				if err := queries.InsertGroup(r.Context(), metadataSQLc.InsertGroupParams{
 					GroupID:   groupID,
 					GroupName: registrationRequest.GroupName,
 				}); err != nil {
@@ -187,7 +187,7 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 					return
 				}
 
-				if err := queries.AddServerToGroup(r.Context(), metadataDB.AddServerToGroupParams{
+				if err := queries.AddServerToGroup(r.Context(), metadataSQLc.AddServerToGroupParams{
 					GroupID:  groupID,
 					ServerID: serverID,
 				}); err != nil {
