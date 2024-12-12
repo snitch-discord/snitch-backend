@@ -49,7 +49,7 @@ func TestCreateNamespace(t *testing.T) {
 
 		tokenCache := jwt.TokenCache{}
 		tokenCache.Set("test-token")
-		err := CreateNamespace(context.Background(), &tokenCache, config)
+		err := CreateNamespace("metadata", context.Background(), &tokenCache, config)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -69,7 +69,7 @@ func TestCreateNamespace(t *testing.T) {
 			AuthKey:   "test-token",
 		}
 
-		err := CreateNamespace(context.Background(), &jwt.TokenCache{}, config)
+		err := CreateNamespace("test", context.Background(), &jwt.TokenCache{}, config)
 
 		if err == nil {
 			t.Error("expected error, got nil")

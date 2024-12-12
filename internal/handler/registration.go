@@ -9,6 +9,7 @@ import (
 	"snitch/snitchbe/internal/dbconfig"
 	groupSQL "snitch/snitchbe/internal/group/sql"
 	"snitch/snitchbe/internal/libsqladmin"
+	"strconv"
 
 	"snitch/snitchbe/internal/jwt"
 	metadataDB "snitch/snitchbe/internal/metadata/db"
@@ -30,6 +31,21 @@ type registrationResponse struct {
 	GroupID  string `json:"groupId"`
 }
 
+const ServerIDHeader = "X-Server-ID"
+
+func getServerIDFromHeader(r *http.Request) (int, error) {
+	serverIDStr := r.Header.Get(ServerIDHeader)
+	if serverIDStr == "" {
+		return 0, fmt.Errorf("server ID header is required")
+	}
+
+	serverID, err := strconv.Atoi(serverIDStr)
+	if err != nil {
+		return 0, fmt.Errorf("invalid server ID format")
+	}
+
+	return serverID, nil
+}
 func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlConfig dbconfig.LibSQLConfig) http.HandlerFunc {
 	libSQLHttpURL, err := libSqlConfig.HttpURL()
 	if err != nil {
@@ -44,8 +60,15 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 		switch r.Method {
 		case "POST":
 			w.Header().Set("Content-Type", "application/json")
+
+			serverID, err := getServerIDFromHeader(r)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+
 			var registrationRequest registrationRequest
-			err := json.NewDecoder(r.Body).Decode(&registrationRequest)
+			err = json.NewDecoder(r.Body).Decode(&registrationRequest)
 			defer r.Body.Close()
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
@@ -76,7 +99,7 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 
 				if err := queries.AddServerToGroup(r.Context(), metadataDB.AddServerToGroupParams{
 					GroupID:  groupID,
-					ServerID: registrationRequest.ServerID,
+					ServerID: serverID,
 				}); err != nil {
 					slogger.ErrorContext(r.Context(), "Failed adding server to group metadata", "Error", err)
 					http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -143,7 +166,7 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 
 				if err := queries.AddServerToGroup(r.Context(), metadataDB.AddServerToGroupParams{
 					GroupID:  groupID,
-					ServerID: registrationRequest.ServerID,
+					ServerID: serverID,
 				}); err != nil {
 					slogger.ErrorContext(r.Context(), "Failed adding server to group metadata", "Error", err)
 					http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -153,11 +176,11 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 
 			slogger.InfoContext(r.Context(), "Registration completed",
 				"groupID", groupID.String(),
-				"serverID", registrationRequest.ServerID,
+				"serverID", serverID,
 				"isNewGroup", registrationRequest.GroupID == "")
 
 			if err = json.NewEncoder(w).Encode(registrationResponse{
-				ServerID: registrationRequest.ServerID,
+				ServerID: serverID,
 				GroupID:  groupID.String(),
 			}); err != nil {
 				slogger.Error("Encode Response", "Error", err)
