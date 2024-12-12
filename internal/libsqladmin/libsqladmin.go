@@ -11,7 +11,7 @@ import (
 	"snitch/snitchbe/pkg/ctxutil"
 )
 
-func CreateNamespace(ctx context.Context, tokenCache *jwt.TokenCache, config dbconfig.LibSQLConfig) error {
+func CreateNamespace(name string, ctx context.Context, tokenCache *jwt.TokenCache, config dbconfig.LibSQLConfig) error {
 	slogger, ok := ctxutil.Value[*slog.Logger](ctx)
 	if !ok {
 		slogger = slog.Default()
@@ -23,7 +23,7 @@ func CreateNamespace(ctx context.Context, tokenCache *jwt.TokenCache, config dbc
 	}
 
 	request, err := http.NewRequestWithContext(ctx, "POST",
-		adminURL.JoinPath("v1/namespaces/metadata/create").String(),
+		adminURL.JoinPath(fmt.Sprintf("v1/namespaces/%s/create", name)).String(),
 		bytes.NewReader([]byte(`{"dump_url": null}`)))
 
 	if err != nil {
@@ -49,7 +49,7 @@ func CreateNamespace(ctx context.Context, tokenCache *jwt.TokenCache, config dbc
 	return nil
 }
 
-func DoesNamespaceExist(ctx context.Context, tokenCache *jwt.TokenCache, config dbconfig.LibSQLConfig) (bool, error) {
+func DoesNamespaceExist(name string, ctx context.Context, tokenCache *jwt.TokenCache, config dbconfig.LibSQLConfig) (bool, error) {
 	slogger, ok := ctxutil.Value[*slog.Logger](ctx)
 	if !ok {
 		slogger = slog.Default()
@@ -60,8 +60,9 @@ func DoesNamespaceExist(ctx context.Context, tokenCache *jwt.TokenCache, config 
 		return false, err
 	}
 
+	fmt.Println("name: " + name)
 	request, err := http.NewRequestWithContext(ctx, "GET",
-		adminURL.JoinPath("v1/namespaces/metadata/config").String(),
+		adminURL.JoinPath(fmt.Sprintf("v1/namespaces/%s/config", name)).String(),
 		nil)
 
 	if err != nil {
