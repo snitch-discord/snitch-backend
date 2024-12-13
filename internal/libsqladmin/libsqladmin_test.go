@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"snitch/snitchbe/internal/dbconfig"
-	"snitch/snitchbe/internal/jwt"
 )
 
 func getHostAndPort(serverURL string) (host string, port string) {
@@ -47,9 +46,7 @@ func TestCreateNamespace(t *testing.T) {
 			AuthKey:   "test-token",
 		}
 
-		tokenCache := jwt.TokenCache{}
-		tokenCache.Set("test-token")
-		err := CreateNamespace(context.Background(), &tokenCache, config)
+		err := CreateNamespace("metadata", context.Background(), "test-token", config)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -69,7 +66,7 @@ func TestCreateNamespace(t *testing.T) {
 			AuthKey:   "test-token",
 		}
 
-		err := CreateNamespace(context.Background(), &jwt.TokenCache{}, config)
+		err := CreateNamespace("test", context.Background(), "test-token", config)
 
 		if err == nil {
 			t.Error("expected error, got nil")

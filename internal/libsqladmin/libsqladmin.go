@@ -7,11 +7,10 @@ import (
 	"log/slog"
 	"net/http"
 	"snitch/snitchbe/internal/dbconfig"
-	"snitch/snitchbe/internal/jwt"
 	"snitch/snitchbe/pkg/ctxutil"
 )
 
-func CreateNamespace(ctx context.Context, tokenCache *jwt.TokenCache, config dbconfig.LibSQLConfig) error {
+func CreateNamespace(name string, ctx context.Context, token string, config dbconfig.LibSQLConfig) error {
 	slogger, ok := ctxutil.Value[*slog.Logger](ctx)
 	if !ok {
 		slogger = slog.Default()
@@ -23,7 +22,7 @@ func CreateNamespace(ctx context.Context, tokenCache *jwt.TokenCache, config dbc
 	}
 
 	request, err := http.NewRequestWithContext(ctx, "POST",
-		adminURL.JoinPath("v1/namespaces/metadata/create").String(),
+		adminURL.JoinPath(fmt.Sprintf("v1/namespaces/%s/create", name)).String(),
 		bytes.NewReader([]byte(`{"dump_url": null}`)))
 
 	if err != nil {
@@ -31,7 +30,7 @@ func CreateNamespace(ctx context.Context, tokenCache *jwt.TokenCache, config dbc
 		return err
 	}
 
-	request.Header.Set("Authorization", "Bearer "+tokenCache.Get())
+	request.Header.Set("Authorization", "Bearer "+token)
 	request.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(request)
@@ -49,7 +48,7 @@ func CreateNamespace(ctx context.Context, tokenCache *jwt.TokenCache, config dbc
 	return nil
 }
 
-func DoesNamespaceExist(ctx context.Context, tokenCache *jwt.TokenCache, config dbconfig.LibSQLConfig) (bool, error) {
+func DoesNamespaceExist(name string, ctx context.Context, token string, config dbconfig.LibSQLConfig) (bool, error) {
 	slogger, ok := ctxutil.Value[*slog.Logger](ctx)
 	if !ok {
 		slogger = slog.Default()
@@ -61,7 +60,7 @@ func DoesNamespaceExist(ctx context.Context, tokenCache *jwt.TokenCache, config 
 	}
 
 	request, err := http.NewRequestWithContext(ctx, "GET",
-		adminURL.JoinPath("v1/namespaces/metadata/config").String(),
+		adminURL.JoinPath(fmt.Sprintf("v1/namespaces/%s/config", name)).String(),
 		nil)
 
 	if err != nil {
@@ -69,7 +68,7 @@ func DoesNamespaceExist(ctx context.Context, tokenCache *jwt.TokenCache, config 
 		return false, err
 	}
 
-	request.Header.Set("Authorization", "Bearer "+tokenCache.Get())
+	request.Header.Set("Authorization", "Bearer "+token)
 
 	resp, err := http.DefaultClient.Do(request)
 	if err != nil {
