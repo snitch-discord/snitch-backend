@@ -63,7 +63,7 @@ func main() {
 		case "/databases":
 			databaseEndpointHandler(w, r)
 		case "/reports":
-			reportEndpointHandler(w, r)
+			middleware.GroupContext(reportEndpointHandler, metadataDb)(w, r)
 		default:
 			http.Error(w, "404 Not Found", http.StatusNotFound)
 		}
