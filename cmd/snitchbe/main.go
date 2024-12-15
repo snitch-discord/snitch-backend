@@ -70,7 +70,6 @@ func main() {
 	}
 
 	handler = middleware.RecordResponse(handler)
-	handler = middleware.GroupContext(handler, metadataDb)
 	handler = middleware.Recovery(handler)
 	handler = middleware.PermissiveCORSHandler(handler)
 	handler = middleware.Log(handler)

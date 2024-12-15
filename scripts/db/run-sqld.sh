@@ -15,7 +15,7 @@ sudo rm -rf "${DB_DATA_PATH}"
 
 mkdir "${DB_DATA_PATH}"
 
-docker run -p 8080:8080 -p 9090:9090 -d --name ${DB_IMAGE_NAME} -ti \
+docker run -p :8080 -p :9090 -d --name ${DB_IMAGE_NAME} -ti \
   --network snitch-network \
   -e SQLD_NODE=primary \
   -e SQLD_HTTP_LISTEN_ADDR=0.0.0.0:8080 \

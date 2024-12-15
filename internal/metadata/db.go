@@ -14,7 +14,7 @@ import (
 	"snitch/snitchbe/pkg/ctxutil"
 
 	"github.com/google/uuid"
-	"github.com/tursodatabase/libsql-client-go/libsql"
+	_ "github.com/tursodatabase/go-libsql"
 )
 
 func NewMetadataDB(ctx context.Context, token string, config dbconfig.LibSQLConfig) (*sql.DB, error) {
@@ -36,22 +36,17 @@ func NewMetadataDB(ctx context.Context, token string, config dbconfig.LibSQLConf
 		}
 	}
 
-	httpURL, err := config.HttpURL()
+	databaseURL, err := config.DatabaseURL(token)
 	if err != nil {
 		return nil, fmt.Errorf("get http url: %w", err)
 	}
 
-	connector, err := libsql.NewConnector(
-		fmt.Sprintf("http://%s.%s", "metadata", "db"),
-		libsql.WithProxy(httpURL.String()),
-		libsql.WithAuthToken(token),
-	)
+	db, err := sql.Open("libsql", databaseURL.String())
 	if err != nil {
-		slogger.ErrorContext(ctx, "Failed creating metadata connector", "Error", err)
-		return nil, fmt.Errorf("couldnt create connector: %w", err)
+		slogger.ErrorContext(ctx, "Error opening DB", "Error", err)
+		return nil, fmt.Errorf("couldnt open db: %w", err)
 	}
 
-	db := sql.OpenDB(connector)
 	if _, err := db.ExecContext(ctx, metadataSQL.MetadataSchema); err != nil {
 		defer db.Close()
 		slogger.ErrorContext(ctx, "Failed creating metadata database", "Error", err)

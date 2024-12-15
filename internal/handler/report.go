@@ -45,7 +45,7 @@ func CreateReportHandler(tokenCache *jwt.TokenCache, libSqlConfig dbconfig.LibSQ
 
 		switch r.Method {
 		case "GET":
-			db, err := group.NewGroupDB(ctx, tokenCache, libSqlConfig, groupID)
+			db, err := group.NewGroupDB(ctx, tokenCache.Get(), libSqlConfig, groupID)
 			if err != nil {
 				slogger.Error("Failed creating group db", "Error", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -73,7 +73,7 @@ func CreateReportHandler(tokenCache *jwt.TokenCache, libSqlConfig dbconfig.LibSQ
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			db, err := group.NewGroupDB(ctx, tokenCache, libSqlConfig, groupID)
+			db, err := group.NewGroupDB(ctx, tokenCache.Get(), libSqlConfig, groupID)
 			if err != nil {
 				slogger.Error("Failed creating group db", "Error", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)

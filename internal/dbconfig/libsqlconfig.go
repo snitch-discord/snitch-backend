@@ -1,8 +1,6 @@
 package dbconfig
 
 import (
-	"crypto/ed25519"
-	"encoding/hex"
 	"fmt"
 	"net/url"
 	"os"
@@ -47,6 +45,6 @@ func (libSQLConfig LibSQLConfig) AdminURL() (*url.URL, error) {
 	return url.Parse(fmt.Sprintf("http://%s:%s", libSQLConfig.Host, libSQLConfig.AdminPort))
 }
 
-func (libSQLConfig LibSQLConfig) DatabaseURL(key ed25519.PrivateKey) (*url.URL, error) {
-	return url.Parse(fmt.Sprintf("libsql://%s:%s?authToken=%s", libSQLConfig.Host, libSQLConfig.Port, hex.EncodeToString(key)))
+func (libSQLConfig LibSQLConfig) DatabaseURL(token string) (*url.URL, error) {
+	return url.Parse(fmt.Sprintf("libsql://%s:%s?authToken=%s", libSQLConfig.Host, libSQLConfig.Port, token))
 }

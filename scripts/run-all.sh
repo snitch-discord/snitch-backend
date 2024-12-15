@@ -16,4 +16,5 @@ if [ ! -d "$SECRETS_DIR" ]; then
 fi
 
 bash "${BASE_DIR}"/scripts/db/run-sqld.sh
+bash "${BASE_DIR}"/scripts/proxy/run-traefik.sh
 bash "${BASE_DIR}"/scripts/go/run-go.sh

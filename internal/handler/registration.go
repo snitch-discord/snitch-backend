@@ -17,7 +17,7 @@ import (
 	"snitch/snitchbe/pkg/ctxutil"
 
 	"github.com/google/uuid"
-	"github.com/tursodatabase/libsql-client-go/libsql"
+	_ "github.com/tursodatabase/go-libsql"
 )
 
 type registrationRequest struct {
@@ -47,14 +47,16 @@ func getServerIDFromHeader(r *http.Request) (int, error) {
 	return serverID, nil
 }
 func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlConfig dbconfig.LibSQLConfig) http.HandlerFunc {
-	libSQLHttpURL, err := libSqlConfig.HttpURL()
-	if err != nil {
-		panic(err)
-	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		slogger, ok := ctxutil.Value[*slog.Logger](r.Context())
 		if !ok {
 			slogger = slog.Default()
+		}
+
+		dbURL, err := libSqlConfig.HttpURL()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 
 		switch r.Method {
@@ -96,23 +98,21 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 					http.Error(w, "Group does not exist", http.StatusNotFound)
 					return
 				}
+				
+				query := dbURL.Query()
+				query.Add("authToken", tokenCache.Get())
+				dbURL.RawQuery = query.Encode()
+				dbURL.Host = fmt.Sprintf("%s.%s", groupID.String(), libSqlConfig.Host)
 
-				conn, err := libsql.NewConnector(
-					fmt.Sprintf("http://%s.%s", groupID.String(), "db"),
-					libsql.WithProxy(libSQLHttpURL.String()),
-					libsql.WithAuthToken(tokenCache.Get()),
-				)
+				newDB, err := sql.Open("libsql", dbURL.String())
 				if err != nil {
-					slogger.ErrorContext(r.Context(), "Failed creating database connector", "Error", err)
+					slogger.ErrorContext(r.Context(), "Failed to connect to db", "Error", err)
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
 				}
+				defer newDB.Close()
 
-				newDb := sql.OpenDB(conn)
-				defer newDb.Close()
-
-				groupQueries := groupSQLc.New(newDb)
-
+				groupQueries := groupSQLc.New(newDB)
 				if err := queries.AddServerToGroup(r.Context(), metadataSQLc.AddServerToGroupParams{
 					GroupID:  groupID,
 					ServerID: serverID,
@@ -150,29 +150,28 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 					}
 				}
 
-				conn, err := libsql.NewConnector(
-					fmt.Sprintf("http://%s.%s", groupID.String(), "db"),
-					libsql.WithProxy(libSQLHttpURL.String()),
-					libsql.WithAuthToken(tokenCache.Get()),
-				)
+				query := dbURL.Query()
+				query.Add("authToken", tokenCache.Get())
+				dbURL.RawQuery = query.Encode()
+				dbURL.Host = fmt.Sprintf("%s.%s", groupID.String(), libSqlConfig.Host)
+
+				newDB, err := sql.Open("libsql", dbURL.String())
 				if err != nil {
-					slogger.ErrorContext(r.Context(), "Failed creating database connector", "Error", err)
+					slogger.ErrorContext(r.Context(), "Failed to connect to db", "Error", err)
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
 				}
+				defer newDB.Close()
 
-				newDb := sql.OpenDB(conn)
-				defer newDb.Close()
+				groupQueries := groupSQLc.New(newDB)
 
-				groupQueries := groupSQLc.New(newDb)
-
-				if err := newDb.PingContext(r.Context()); err != nil {
+				if err := newDB.PingContext(r.Context()); err != nil {
 					slogger.Error("Ping Database", "Error", err)
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
 				}
 
-				if _, err := newDb.ExecContext(r.Context(), groupSQL.GroupSchema); err != nil {
+				if _, err := newDB.ExecContext(r.Context(), groupSQL.GroupSchema); err != nil {
 					slogger.Error("Create Table", "Error", err)
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
