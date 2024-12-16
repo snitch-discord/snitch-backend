@@ -1,0 +1,60 @@
+services:
+  snitch-sqld:
+    image: ghcr.io/tursodatabase/libsql-server:latest
+    command: sqld --enable-namespaces
+    environment:
+      - SQLD_NODE=primary
+      - SQLD_HTTP_LISTEN_ADDR=0.0.0.0:8080
+      - SQLD_ADMIN_LISTEN_ADDR=0.0.0.0:9090
+      - SQLD_DB_PATH=snitch.db
+      - RUST_LOG=trace
+      - SQL_AUTH_JWT_KEY="${PUBLIC_KEY}"
+    ports:
+      - ":8080"
+      - ":9090"
+    volumes:
+      - sqld-volume:/var/lib/sqld
+
+  snitch-traefik:
+    image: traefik:v3.2
+    depends_on:
+      - snitch-sqld
+    ports:
+      - 8080:8080
+      - 9090:9090
+    command:
+      - --accesslog=true
+      - --accesslog.addinternals
+      - --entrypoints.web-8080.address=:8080
+      - --entrypoints.web-9090.address=:9090
+    labels:
+      - traefik.http.services.snitch-sqld.loadbalancer.servers[0].url=http://snitch-sqld
+      - traefik.http.routers.map-subdomain.rule=HostRegexp(`{subdomain:[a-z0-9-.]+}\.snitch-traefik`)
+      - traefik.http.routers.map-subdomain.service=snitch-sqld
+      - traefik.http.routers.map-subdomain.entrypoints=web-8080
+      - traefik.http.routers.map-subdomain.middlewares=redirect-sqld,add-host-header
+      - traefik.http.routers.catch-all.rule=!HostRegexp(`{subdomain:[a-z0-9-]+}\.snitch-traefik`)
+      - traefik.http.routers.catch-all.service=snitch-sqld
+      - traefik.http.routers.catch-all.entrypoints=web-8080,web-9090
+      - traefik.http.middlewares.add-host-header.headers.customrequestheaders.Host={subdomain}.db
+      - traefik.http.middlewares.redirect-sqld.redirectregex.regex=^http://([a-z0-9-]+)\.snitch-traefik(.*)
+      - traefik.http.middlewares.redirect-sqld.redirectregex.replacement=http://snitch-sqld$${2}
+      - traefik.http.middlewares.redirect-sqld.redirectregex.permanent=true
+
+  snitchbe:
+    build:
+      dockerfile: Containerfile
+    container_name: snitchbe
+    image: snitchbe
+    depends_on:
+      - snitch-traefik
+    environment:
+      - LIBSQL_HOST=snitch-traefik
+      - LIBSQL_PORT=8080
+      - LIBSQL_ADMIN_PORT=9090
+      - LIBSQL_AUTH_KEY=${PRIVATE_KEY}
+    ports:
+      - 4200:4200
+
+volumes:
+  sqld-volume:
