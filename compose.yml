@@ -7,49 +7,70 @@ services:
       - SQLD_HTTP_LISTEN_ADDR=0.0.0.0:8080
       - SQLD_ADMIN_LISTEN_ADDR=0.0.0.0:9090
       - SQLD_DB_PATH=snitch.db
-      - RUST_LOG=trace
+      # - RUST_LOG=trace
       - SQL_AUTH_JWT_KEY="${PUBLIC_KEY}"
     ports:
       - ":8080"
       - ":9090"
     volumes:
       - sqld-volume:/var/lib/sqld
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.catch-all.rule=!HostRegexp(`[a-z0-9-]+\\.(snitch-traefik|localhost).*`)"
+      - "traefik.http.routers.catch-all.entrypoints=web-8080"
+      - "traefik.http.routers.catch-all.service=snitch-sqld-svc"
+      - "traefik.http.services.snitch-sqld-svc.loadbalancer.server.port=8080"
+      - "traefik.http.routers.catch-all-admin.rule=!HostRegexp(`[a-z0-9-]+\\.(snitch-traefik|localhost).*`)"
+      - "traefik.http.routers.catch-all-admin.entrypoints=web-9090"
+      - "traefik.http.routers.catch-all-admin.service=admin-sqld-svc"
+      - "traefik.http.services.admin-sqld-svc.loadbalancer.server.port=9090"
+      - "traefik.http.routers.map-subdomain.rule=HostRegexp(`[a-z0-9-]+\\.(snitch-traefik|localhost).*`)"
+      - "traefik.http.routers.map-subdomain.entrypoints=web-8080"
+      - "traefik.http.routers.map-subdomain.middlewares=redirect-sqld,add-host-header"
+      - "traefik.http.routers.map-subdomain.service=snitch-sqld-svc"
+      - "traefik.http.middlewares.add-host-header.headers.customrequestheaders.Host={subdomain}.db"
+      - "traefik.http.middlewares.redirect-sqld.redirectregex.regex=^http://[a-z0-9-]+\\.(snitch-traefik|localhost)(.*)"
+      - "traefik.http.middlewares.redirect-sqld.redirectregex.replacement=http://$${1}$${2}"
+      - "traefik.http.middlewares.redirect-sqld.redirectregex.permanent=true"
 
-  snitch-traefik:
-    image: traefik:v3.2
+  snitch-sqld-proxy:
+    image: traefik:latest
     depends_on:
       - snitch-sqld
     ports:
       - 8080:8080
       - 9090:9090
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
     command:
-      - --accesslog=true
-      - --accesslog.addinternals
-      - --entrypoints.web-8080.address=:8080
-      - --entrypoints.web-9090.address=:9090
-    labels:
-      - traefik.http.services.snitch-sqld.loadbalancer.servers[0].url=http://snitch-sqld
-      - traefik.http.routers.map-subdomain.rule=HostRegexp(`{subdomain:[a-z0-9-.]+}\.snitch-traefik`)
-      - traefik.http.routers.map-subdomain.service=snitch-sqld
-      - traefik.http.routers.map-subdomain.entrypoints=web-8080
-      - traefik.http.routers.map-subdomain.middlewares=redirect-sqld,add-host-header
-      - traefik.http.routers.catch-all.rule=!HostRegexp(`{subdomain:[a-z0-9-]+}\.snitch-traefik`)
-      - traefik.http.routers.catch-all.service=snitch-sqld
-      - traefik.http.routers.catch-all.entrypoints=web-8080,web-9090
-      - traefik.http.middlewares.add-host-header.headers.customrequestheaders.Host={subdomain}.db
-      - traefik.http.middlewares.redirect-sqld.redirectregex.regex=^http://([a-z0-9-]+)\.snitch-traefik(.*)
-      - traefik.http.middlewares.redirect-sqld.redirectregex.replacement=http://snitch-sqld$${2}
-      - traefik.http.middlewares.redirect-sqld.redirectregex.permanent=true
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--log.level=TRACE"
+      - "--log.format=json"
+      - "--accesslog=true"
+      - "--accesslog.addinternals"
+      - "--entrypoints.web-8080.address=:8080"
+      - "--entrypoints.web-9090.address=:9090"
 
   snitchbe:
     build:
       dockerfile: Containerfile
-    container_name: snitchbe
+    develop:
+      watch:
+        - action: rebuild
+          path: go.mod
+        - action: rebuild
+          path: cmd
+        - action: rebuild
+          path: internal
+        - action: rebuild
+          path: pkg
+    restart: unless-stopped
     image: snitchbe
     depends_on:
-      - snitch-traefik
+      - snitch-sqld-proxy
     environment:
-      - LIBSQL_HOST=snitch-traefik
+      - LIBSQL_HOST=snitch-sqld-proxy
       - LIBSQL_PORT=8080
       - LIBSQL_ADMIN_PORT=9090
       - LIBSQL_AUTH_KEY=${PRIVATE_KEY}
@@ -58,3 +79,4 @@ services:
 
 volumes:
   sqld-volume:
+  go-cache:

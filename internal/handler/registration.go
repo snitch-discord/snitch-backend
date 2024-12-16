@@ -52,7 +52,7 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 		if !ok {
 			slogger = slog.Default()
 		}
-
+		
 		dbURL, err := libSqlConfig.HttpURL()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -60,7 +60,7 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 		}
 
 		switch r.Method {
-		case "POST":
+		case http.MethodPost:
 			w.Header().Set("Content-Type", "application/json")
 
 			serverID, err := getServerIDFromHeader(r)
@@ -154,6 +154,8 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 				query.Add("authToken", tokenCache.Get())
 				dbURL.RawQuery = query.Encode()
 				dbURL.Host = fmt.Sprintf("%s.%s", groupID.String(), libSqlConfig.Host)
+
+				slogger.InfoContext(r.Context(), "DB URL", "URL", dbURL.String())
 
 				newDB, err := sql.Open("libsql", dbURL.String())
 				if err != nil {

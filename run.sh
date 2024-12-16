@@ -13,4 +13,4 @@ if [ ! -f "$ENV_FILE" ]; then
   printf "PRIVATE_KEY=%s\nPUBLIC_KEY=%s" "$B64_PRIVATE_KEY" "$B64_PUBLIC_KEY" > $ENV_FILE
 fi
 
-docker compose up --build
+docker compose up --build --watch

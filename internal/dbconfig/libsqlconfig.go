@@ -46,5 +46,5 @@ func (libSQLConfig LibSQLConfig) AdminURL() (*url.URL, error) {
 }
 
 func (libSQLConfig LibSQLConfig) DatabaseURL(token string) (*url.URL, error) {
-	return url.Parse(fmt.Sprintf("libsql://%s:%s?authToken=%s", libSQLConfig.Host, libSQLConfig.Port, token))
+	return url.Parse(fmt.Sprintf("http://%s:%s?authToken=%s", libSQLConfig.Host, libSQLConfig.Port, token))
 }

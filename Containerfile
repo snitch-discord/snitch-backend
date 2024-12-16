@@ -8,6 +8,7 @@ COPY cmd cmd
 COPY internal internal
 COPY pkg pkg
 
+RUN go get ./...
 RUN GOOS=linux go build -ldflags '-linkmode external -extldflags "-static"' -o /bin/snitchbe ./cmd/snitchbe
 
 FROM debian
