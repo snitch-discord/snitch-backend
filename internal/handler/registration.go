@@ -46,19 +46,13 @@ func getServerIDFromHeader(r *http.Request) (int, error) {
 
 	return serverID, nil
 }
-func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlConfig dbconfig.LibSQLConfig) http.HandlerFunc {
+func CreateRegistrationHandler(tokenCache *jwt.TokenCache, metadataDB *sql.DB, libSqlConfig dbconfig.LibSQLConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		slogger, ok := ctxutil.Value[*slog.Logger](r.Context())
 		if !ok {
 			slogger = slog.Default()
 		}
 		
-		dbURL, err := libSqlConfig.HttpURL()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
 		switch r.Method {
 		case http.MethodPost:
 			w.Header().Set("Content-Type", "application/json")
@@ -77,7 +71,7 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 				return
 			}
 
-			queries := metadataSQLc.New(db)
+			metadataQueries := metadataSQLc.New(metadataDB)
 			var groupID uuid.UUID
 
 			if registrationRequest.GroupID != "" {
@@ -99,10 +93,11 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 					return
 				}
 				
-				query := dbURL.Query()
-				query.Add("authToken", tokenCache.Get())
-				dbURL.RawQuery = query.Encode()
-				dbURL.Host = fmt.Sprintf("%s.%s", groupID.String(), libSqlConfig.Host)
+				dbURL, err := libSqlConfig.NamespaceURL(groupID.String(), tokenCache.Get())
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
 
 				newDB, err := sql.Open("libsql", dbURL.String())
 				if err != nil {
@@ -113,7 +108,7 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 				defer newDB.Close()
 
 				groupQueries := groupSQLc.New(newDB)
-				if err := queries.AddServerToGroup(r.Context(), metadataSQLc.AddServerToGroupParams{
+				if err := metadataQueries.AddServerToGroup(r.Context(), metadataSQLc.AddServerToGroupParams{
 					GroupID:  groupID,
 					ServerID: serverID,
 				}); err != nil {
@@ -150,10 +145,11 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 					}
 				}
 
-				query := dbURL.Query()
-				query.Add("authToken", tokenCache.Get())
-				dbURL.RawQuery = query.Encode()
-				dbURL.Host = fmt.Sprintf("%s.%s", groupID.String(), libSqlConfig.Host)
+				dbURL, err := libSqlConfig.NamespaceURL(groupID.String(), tokenCache.Get())
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
 
 				slogger.InfoContext(r.Context(), "DB URL", "URL", dbURL.String())
 
@@ -178,8 +174,10 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
 				}
+				
+				slogger.InfoContext(r.Context(), "LOOK HERE", "HELLO!", "HI")
 
-				if err := queries.InsertGroup(r.Context(), metadataSQLc.InsertGroupParams{
+				if err := metadataQueries.InsertGroup(r.Context(), metadataSQLc.InsertGroupParams{
 					GroupID:   groupID,
 					GroupName: registrationRequest.GroupName,
 				}); err != nil {
@@ -188,7 +186,7 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, db *sql.DB, libSqlCon
 					return
 				}
 
-				if err := queries.AddServerToGroup(r.Context(), metadataSQLc.AddServerToGroupParams{
+				if err := metadataQueries.AddServerToGroup(r.Context(), metadataSQLc.AddServerToGroupParams{
 					GroupID:  groupID,
 					ServerID: serverID,
 				}); err != nil {

@@ -37,8 +37,8 @@ func LibSQLConfigFromEnv() (LibSQLConfig, error) {
 	return cfg, nil
 }
 
-func (libSQLConfig LibSQLConfig) HttpURL() (*url.URL, error) {
-	return url.Parse(fmt.Sprintf("http://%s:%s", libSQLConfig.Host, libSQLConfig.Port))
+func (libSQLConfig LibSQLConfig) NamespaceURL(namespace string, token string) (*url.URL, error) {
+	return url.Parse(fmt.Sprintf("http://%s.%s:%s?authToken=%s", namespace, libSQLConfig.Host, libSQLConfig.Port, token))
 }
 
 func (libSQLConfig LibSQLConfig) AdminURL() (*url.URL, error) {

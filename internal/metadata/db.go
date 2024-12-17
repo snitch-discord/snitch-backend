@@ -36,7 +36,7 @@ func NewMetadataDB(ctx context.Context, token string, config dbconfig.LibSQLConf
 		}
 	}
 
-	databaseURL, err := config.DatabaseURL(token)
+	databaseURL, err := config.NamespaceURL("metadata", token)
 	if err != nil {
 		return nil, fmt.Errorf("get http url: %w", err)
 	}
@@ -46,6 +46,8 @@ func NewMetadataDB(ctx context.Context, token string, config dbconfig.LibSQLConf
 		slogger.ErrorContext(ctx, "Error opening DB", "Error", err)
 		return nil, fmt.Errorf("couldnt open db: %w", err)
 	}
+
+	slogger.InfoContext(ctx, "DB Schema", "Schema", metadataSQL.MetadataSchema)
 
 	if _, err := db.ExecContext(ctx, metadataSQL.MetadataSchema); err != nil {
 		defer db.Close()
