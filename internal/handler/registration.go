@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"snitch/snitchbe/internal/dbconfig"
-	groupSQL "snitch/snitchbe/internal/group/sql"
 	groupSQLc "snitch/snitchbe/internal/group/sqlc"
 	"snitch/snitchbe/internal/libsqladmin"
 	"strconv"
@@ -52,7 +51,7 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, metadataDB *sql.DB, l
 		if !ok {
 			slogger = slog.Default()
 		}
-		
+
 		switch r.Method {
 		case http.MethodPost:
 			w.Header().Set("Content-Type", "application/json")
@@ -92,7 +91,7 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, metadataDB *sql.DB, l
 					http.Error(w, "Group does not exist", http.StatusNotFound)
 					return
 				}
-				
+
 				dbURL, err := libSqlConfig.NamespaceURL(groupID.String(), tokenCache.Get())
 				if err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -169,13 +168,22 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, metadataDB *sql.DB, l
 					return
 				}
 
-				if _, err := newDB.ExecContext(r.Context(), groupSQL.GroupSchema); err != nil {
-					slogger.Error("Create Table", "Error", err)
+				// TODO: use transactions
+				if err := groupQueries.CreateUserTable(r.Context()); err != nil {
+					slogger.Error("Create User Table", "Error", err)
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
 				}
-				
-				slogger.InfoContext(r.Context(), "LOOK HERE", "HELLO!", "HI")
+				if err := groupQueries.CreateServerTable(r.Context()); err != nil {
+					slogger.Error("Create Server Table", "Error", err)
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				if err := groupQueries.CreateReportTable(r.Context()); err != nil {
+					slogger.Error("Create Group Table", "Error", err)
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
 
 				if err := metadataQueries.InsertGroup(r.Context(), metadataSQLc.InsertGroupParams{
 					GroupID:   groupID,

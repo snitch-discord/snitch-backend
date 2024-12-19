@@ -27,6 +27,12 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.addServerToGroupStmt, err = db.PrepareContext(ctx, addServerToGroup); err != nil {
 		return nil, fmt.Errorf("error preparing query AddServerToGroup: %w", err)
 	}
+	if q.createGroupTableStmt, err = db.PrepareContext(ctx, createGroupTable); err != nil {
+		return nil, fmt.Errorf("error preparing query CreateGroupTable: %w", err)
+	}
+	if q.createServerTableStmt, err = db.PrepareContext(ctx, createServerTable); err != nil {
+		return nil, fmt.Errorf("error preparing query CreateServerTable: %w", err)
+	}
 	if q.findGroupIDByServerIDStmt, err = db.PrepareContext(ctx, findGroupIDByServerID); err != nil {
 		return nil, fmt.Errorf("error preparing query FindGroupIDByServerID: %w", err)
 	}
@@ -41,6 +47,16 @@ func (q *Queries) Close() error {
 	if q.addServerToGroupStmt != nil {
 		if cerr := q.addServerToGroupStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing addServerToGroupStmt: %w", cerr)
+		}
+	}
+	if q.createGroupTableStmt != nil {
+		if cerr := q.createGroupTableStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing createGroupTableStmt: %w", cerr)
+		}
+	}
+	if q.createServerTableStmt != nil {
+		if cerr := q.createServerTableStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing createServerTableStmt: %w", cerr)
 		}
 	}
 	if q.findGroupIDByServerIDStmt != nil {
@@ -93,6 +109,8 @@ type Queries struct {
 	db                        DBTX
 	tx                        *sql.Tx
 	addServerToGroupStmt      *sql.Stmt
+	createGroupTableStmt      *sql.Stmt
+	createServerTableStmt     *sql.Stmt
 	findGroupIDByServerIDStmt *sql.Stmt
 	insertGroupStmt           *sql.Stmt
 }
@@ -102,6 +120,8 @@ func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 		db:                        tx,
 		tx:                        tx,
 		addServerToGroupStmt:      q.addServerToGroupStmt,
+		createGroupTableStmt:      q.createGroupTableStmt,
+		createServerTableStmt:     q.createServerTableStmt,
 		findGroupIDByServerIDStmt: q.findGroupIDByServerIDStmt,
 		insertGroupStmt:           q.insertGroupStmt,
 	}

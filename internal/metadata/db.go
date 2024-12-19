@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"snitch/snitchbe/internal/dbconfig"
 	"snitch/snitchbe/internal/libsqladmin"
-	metadataSQL "snitch/snitchbe/internal/metadata/sql"
 	"snitch/snitchbe/internal/metadata/sqlc"
 
 	"snitch/snitchbe/pkg/ctxutil"
@@ -47,12 +46,18 @@ func NewMetadataDB(ctx context.Context, token string, config dbconfig.LibSQLConf
 		return nil, fmt.Errorf("couldnt open db: %w", err)
 	}
 
-	slogger.InfoContext(ctx, "DB Schema", "Schema", metadataSQL.MetadataSchema)
+	queries := sqlc.New(db)
 
-	if _, err := db.ExecContext(ctx, metadataSQL.MetadataSchema); err != nil {
-		defer db.Close()
-		slogger.ErrorContext(ctx, "Failed creating metadata database", "Error", err)
-		return nil, fmt.Errorf("couldnt create database: %w", err)
+	// TODO: use transactions
+
+	if err := queries.CreateGroupTable(ctx); err != nil {
+		slogger.ErrorContext(ctx, "Failed creating group table", "Error", err)
+		return nil, fmt.Errorf("couldnt create group table: %w", err)
+	}
+
+	if err := queries.CreateServerTable(ctx); err != nil {
+		slogger.ErrorContext(ctx, "Failed creating server table", "Error", err)
+		return nil, fmt.Errorf("couldnt create server table: %w", err)
 	}
 
 	return db, nil

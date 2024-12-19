@@ -12,6 +12,9 @@ type Querier interface {
 	AddServer(ctx context.Context, serverID int) error
 	AddUser(ctx context.Context, userID int) error
 	CreateReport(ctx context.Context, arg CreateReportParams) (int, error)
+	CreateReportTable(ctx context.Context) error
+	CreateServerTable(ctx context.Context) error
+	CreateUserTable(ctx context.Context) error
 	GetAllReports(ctx context.Context) ([]GetAllReportsRow, error)
 }
 

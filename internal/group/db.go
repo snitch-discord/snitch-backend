@@ -19,12 +19,13 @@ func NewGroupDB(ctx context.Context, token string, config dbconfig.LibSQLConfig,
 		slogger = slog.Default()
 	}
 
-	httpURL, err := config.DatabaseURL(token)
+	databaseURL, err := config.NamespaceURL(groupID, token)
 	if err != nil {
-		return nil, fmt.Errorf("get http url: %w", err)
+		slogger.ErrorContext(ctx, "Failed getting group DB URL", "Error", err)
+		return nil, fmt.Errorf("couldnt get group DB URL: %w", err)
 	}
 
-	db, err := sql.Open("libsql", httpURL.String())
+	db, err := sql.Open("libsql", databaseURL.String())
 	if err != nil {
 		slogger.ErrorContext(ctx, "Failed creating group DB", "Error", err)
 		return nil, fmt.Errorf("couldnt create group DB: %w", err)
