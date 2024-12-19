@@ -6,13 +6,14 @@ import (
 	_ "embed"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"snitch/snitchbe/internal/dbconfig"
 	"snitch/snitchbe/internal/libsqladmin"
 	"snitch/snitchbe/internal/metadata/sqlc"
-
 	"snitch/snitchbe/pkg/ctxutil"
 
 	"github.com/google/uuid"
+	"github.com/tursodatabase/go-libsql"
 	_ "github.com/tursodatabase/go-libsql"
 )
 
@@ -35,16 +36,20 @@ func NewMetadataDB(ctx context.Context, token string, config dbconfig.LibSQLConf
 		}
 	}
 
-	databaseURL, err := config.NamespaceURL("metadata", token)
+	metadataURL, err := config.MetadataDB()
 	if err != nil {
-		return nil, fmt.Errorf("get http url: %w", err)
+		return nil, fmt.Errorf("Cant get metadata: %w", err)
 	}
 
-	db, err := sql.Open("libsql", databaseURL.String())
+	dbPath := filepath.Join("/localdb", "local.metadata.db")
+
+	conn, err := libsql.NewEmbeddedReplicaConnector(dbPath, metadataURL.String(), libsql.WithAuthToken(token))
 	if err != nil {
 		slogger.ErrorContext(ctx, "Error opening DB", "Error", err)
 		return nil, fmt.Errorf("couldnt open db: %w", err)
 	}
+
+	db := sql.OpenDB(conn)
 
 	queries := sqlc.New(db)
 
@@ -72,6 +77,7 @@ func FindGroupIDByServerID(ctx context.Context, db *sql.DB, serverID int) (uuid.
 	var groupID uuid.UUID
 	queries := sqlc.New(db)
 	groupID, err := queries.FindGroupIDByServerID(ctx, serverID)
+
 	if err != nil {
 		slogger.ErrorContext(ctx, "Failed finding group id", "Error", err)
 		return uuid.Nil, fmt.Errorf("couldnt find group id: %w", err)
