@@ -51,20 +51,32 @@ func NewMetadataDB(ctx context.Context, token string, config dbconfig.LibSQLConf
 
 	db := sql.OpenDB(conn)
 
-	queries := sqlc.New(db)
+	tx, err := db.BeginTx(ctx, nil)
 
-	// TODO: use transactions
+	if err != nil {
+		slogger.ErrorContext(ctx, "Failed starting transaction", "Error", err)
+		return nil, fmt.Errorf("couldnt start transaction: %w", err)
+	}
+	defer tx.Rollback()
 
-	if err := queries.CreateGroupTable(ctx); err != nil {
+	queries := sqlc.New(tx)
+
+	qtx := queries.WithTx(tx)
+
+	if err := qtx.CreateGroupTable(ctx); err != nil {
 		slogger.ErrorContext(ctx, "Failed creating group table", "Error", err)
 		return nil, fmt.Errorf("couldnt create group table: %w", err)
 	}
 
-	if err := queries.CreateServerTable(ctx); err != nil {
+	if err := qtx.CreateServerTable(ctx); err != nil {
 		slogger.ErrorContext(ctx, "Failed creating server table", "Error", err)
 		return nil, fmt.Errorf("couldnt create server table: %w", err)
 	}
 
+	if err := tx.Commit(); err != nil {
+		slogger.ErrorContext(ctx, "Failed to commit transaction", "Error", err)
+		return nil, fmt.Errorf("couldnt commit transaction: %w", err)
+	}
 	return db, nil
 }
 

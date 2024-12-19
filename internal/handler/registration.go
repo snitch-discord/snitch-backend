@@ -45,6 +45,7 @@ func getServerIDFromHeader(r *http.Request) (int, error) {
 
 	return serverID, nil
 }
+
 func CreateRegistrationHandler(tokenCache *jwt.TokenCache, metadataDB *sql.DB, libSqlConfig dbconfig.LibSQLConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		slogger, ok := ctxutil.Value[*slog.Logger](r.Context())
@@ -70,7 +71,16 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, metadataDB *sql.DB, l
 				return
 			}
 
-			metadataQueries := metadataSQLc.New(metadataDB)
+			metadataTx, err := metadataDB.BeginTx(r.Context(), nil)
+			if err != nil {
+				slogger.ErrorContext(r.Context(), "Failed to start metadata transaction", "Error", err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			defer metadataTx.Rollback()
+
+			metadataQueries := metadataSQLc.New(metadataTx)
+			metadataQueries.WithTx(metadataTx)
 			var groupID uuid.UUID
 
 			if registrationRequest.GroupID != "" {
@@ -106,7 +116,17 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, metadataDB *sql.DB, l
 				}
 				defer newDB.Close()
 
-				groupQueries := groupSQLc.New(newDB)
+				groupTx, err := newDB.BeginTx(r.Context(), nil)
+				if err != nil {
+					slogger.ErrorContext(r.Context(), "Failed to start group transaction", "Error", err)
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				defer groupTx.Rollback()
+
+				groupQueries := groupSQLc.New(groupTx)
+				groupQueries.WithTx(groupTx)
+
 				if err := metadataQueries.AddServerToGroup(r.Context(), metadataSQLc.AddServerToGroupParams{
 					GroupID:  groupID,
 					ServerID: serverID,
@@ -115,8 +135,21 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, metadataDB *sql.DB, l
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
 				}
+
 				if err := groupQueries.AddServer(r.Context(), serverID); err != nil {
 					slogger.ErrorContext(r.Context(), "Failed adding server to group", "Error", err)
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+
+				if err := groupTx.Commit(); err != nil {
+					slogger.ErrorContext(r.Context(), "Failed to commit group transaction", "Error", err)
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+
+				if err := metadataTx.Commit(); err != nil {
+					slogger.ErrorContext(r.Context(), "Failed to commit metadata transaction", "Error", err)
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
 				}
@@ -160,7 +193,16 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, metadataDB *sql.DB, l
 				}
 				defer newDB.Close()
 
-				groupQueries := groupSQLc.New(newDB)
+				groupTx, err := newDB.BeginTx(r.Context(), nil)
+				if err != nil {
+					slogger.ErrorContext(r.Context(), "Failed to start group transaction", "Error", err)
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				defer groupTx.Rollback()
+
+				groupQueries := groupSQLc.New(groupTx)
+				groupQueries.WithTx(groupTx)
 
 				if err := newDB.PingContext(r.Context()); err != nil {
 					slogger.Error("Ping Database", "Error", err)
@@ -168,7 +210,6 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, metadataDB *sql.DB, l
 					return
 				}
 
-				// TODO: use transactions
 				if err := groupQueries.CreateUserTable(r.Context()); err != nil {
 					slogger.Error("Create User Table", "Error", err)
 					http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -208,6 +249,18 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, metadataDB *sql.DB, l
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
 				}
+
+				if err := groupTx.Commit(); err != nil {
+					slogger.ErrorContext(r.Context(), "Failed to commit group transaction", "Error", err)
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+
+				if err := metadataTx.Commit(); err != nil {
+					slogger.ErrorContext(r.Context(), "Failed to commit metadata transaction", "Error", err)
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
 			}
 
 			slogger.InfoContext(r.Context(), "Registration completed",
@@ -229,3 +282,4 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, metadataDB *sql.DB, l
 		}
 	}
 }
+
