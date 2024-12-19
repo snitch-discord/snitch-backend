@@ -77,7 +77,12 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, metadataDB *sql.DB, l
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			defer metadataTx.Rollback()
+
+			defer func() {
+				if err := metadataTx.Rollback(); err != nil {
+					slogger.ErrorContext(r.Context(), "Failed to rollback transaction metadata", "Error", err)
+				}
+			}()
 
 			metadataQueries := metadataSQLc.New(metadataTx)
 			metadataQueries.WithTx(metadataTx)
@@ -122,7 +127,11 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, metadataDB *sql.DB, l
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
 				}
-				defer groupTx.Rollback()
+				defer func() {
+					if err := groupTx.Rollback(); err != nil {
+						slogger.ErrorContext(r.Context(), "Failed to rollback transaction group", "Error", err)
+					}
+				}()
 
 				groupQueries := groupSQLc.New(groupTx)
 				groupQueries.WithTx(groupTx)
@@ -199,7 +208,11 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, metadataDB *sql.DB, l
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
 				}
-				defer groupTx.Rollback()
+				defer func() {
+					if err := groupTx.Rollback(); err != nil {
+						slogger.ErrorContext(r.Context(), "Failed to rollback transaction group", "Error", err)
+					}
+				}()
 
 				groupQueries := groupSQLc.New(groupTx)
 				groupQueries.WithTx(groupTx)

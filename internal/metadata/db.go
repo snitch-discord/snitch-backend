@@ -57,7 +57,12 @@ func NewMetadataDB(ctx context.Context, token string, config dbconfig.LibSQLConf
 		slogger.ErrorContext(ctx, "Failed starting transaction", "Error", err)
 		return nil, fmt.Errorf("couldnt start transaction: %w", err)
 	}
-	defer tx.Rollback()
+
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			slogger.ErrorContext(ctx, "Failed to rollback transaction", "Error", err)
+		}
+	}()
 
 	queries := sqlc.New(tx)
 
