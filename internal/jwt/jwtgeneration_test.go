@@ -26,12 +26,12 @@ func TestTokenDecode(t *testing.T) {
 	jwtDuration := time.Minute
 	jwtCache := &snitchbe_jwt.TokenCache{}
 	snitchbe_jwt.StartGenerator(jwtDuration, jwtCache, privateKey)
-	
+
 	tokenString := jwtCache.Get()
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		return publicKey, nil
 	}, jwt.WithValidMethods([]string{jwt.SigningMethodEdDSA.Alg()}))
-	
+
 	if err != nil {
 		t.Error(err)
 	}
@@ -40,11 +40,11 @@ func TestTokenDecode(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	
+
 	if exp.Before(time.Now()) {
 		t.Error("Token in past")
 	}
-	
+
 	if exp.After(time.Now().Add(time.Hour)) {
 		t.Error("Token too far in future")
 	}

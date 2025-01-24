@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/x509"
 	_ "embed"
+	"encoding/base64"
 	"encoding/pem"
 	"errors"
 	"flag"
@@ -29,14 +30,18 @@ func main() {
 		panic(err)
 	}
 
-	block, _ := pem.Decode([]byte(libSQLConfig.AuthKey))
+	pemKey, err := base64.StdEncoding.DecodeString(libSQLConfig.AuthKey)
+	if err != nil {
+		panic(err)
+	}
+	block, _ := pem.Decode([]byte(pemKey))
 	parseResult, _ := x509.ParsePKCS8PrivateKey(block.Bytes)
 	key := parseResult.(ed25519.PrivateKey)
 
 	jwtDuration := 10 * time.Minute
 	jwtCache := &jwt.TokenCache{}
 	jwt.StartGenerator(jwtDuration, jwtCache, key)
-	
+
 	dbJwt, err := jwt.CreateToken(key)
 	if err != nil {
 		panic(err)
@@ -63,14 +68,13 @@ func main() {
 		case "/databases":
 			databaseEndpointHandler(w, r)
 		case "/reports":
-			reportEndpointHandler(w, r)
+			middleware.GroupContext(reportEndpointHandler, metadataDb)(w, r)
 		default:
 			http.Error(w, "404 Not Found", http.StatusNotFound)
 		}
 	}
 
 	handler = middleware.RecordResponse(handler)
-	handler = middleware.GroupContext(handler, metadataDb)
 	handler = middleware.Recovery(handler)
 	handler = middleware.PermissiveCORSHandler(handler)
 	handler = middleware.Log(handler)

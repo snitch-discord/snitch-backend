@@ -60,6 +60,43 @@ func (q *Queries) CreateReport(ctx context.Context, arg CreateReportParams) (int
 	return report_id, err
 }
 
+const createReportTable = `-- name: CreateReportTable :exec
+CREATE TABLE IF NOT EXISTS reports (
+    report_id INTEGER PRIMARY KEY,
+    report_text TEXT NOT NULL,
+    reporter_id INTEGER NOT NULL REFERENCES users(user_id),
+    reported_user_id INTEGER NOT NULL REFERENCES users(user_id),
+    origin_server_id INTEGER NOT NULL REFERENCES servers(server_id)
+) STRICT
+`
+
+func (q *Queries) CreateReportTable(ctx context.Context) error {
+	_, err := q.exec(ctx, q.createReportTableStmt, createReportTable)
+	return err
+}
+
+const createServerTable = `-- name: CreateServerTable :exec
+CREATE TABLE IF NOT EXISTS servers (
+    server_id INTEGER PRIMARY KEY
+) STRICT
+`
+
+func (q *Queries) CreateServerTable(ctx context.Context) error {
+	_, err := q.exec(ctx, q.createServerTableStmt, createServerTable)
+	return err
+}
+
+const createUserTable = `-- name: CreateUserTable :exec
+CREATE TABLE IF NOT EXISTS users (
+    user_id INTEGER PRIMARY KEY
+) STRICT
+`
+
+func (q *Queries) CreateUserTable(ctx context.Context) error {
+	_, err := q.exec(ctx, q.createUserTableStmt, createUserTable)
+	return err
+}
+
 const getAllReports = `-- name: GetAllReports :many
 SELECT 
     report_text,

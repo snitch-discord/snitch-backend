@@ -32,11 +32,11 @@ func CreateToken(key ed25519.PrivateKey) (string, error) {
 }
 
 func createTimedToken(key ed25519.PrivateKey, duration time.Duration) (string, error) {
-		token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{
-			"exp": time.Now().Add(duration).Unix(),
-		})
+	token := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{
+		"exp": time.Now().Add(duration).Unix(),
+	})
 
-		return token.SignedString(key)
+	return token.SignedString(key)
 }
 
 func startTicker(interval time.Duration, tokenCache *TokenCache, jwtGenerator func(time.Duration) (string, error)) {

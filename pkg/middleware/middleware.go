@@ -15,7 +15,7 @@ import (
 
 func Trace(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context();
+		ctx := r.Context()
 
 		traceID, err := uuid.Parse(r.Header.Get("X-Trace-ID"))
 		if err != nil {
@@ -34,7 +34,7 @@ func Trace(next http.HandlerFunc) http.HandlerFunc {
 		r.Header.Set("X-Trace-ID", trace.TraceID.String())
 		r.Header.Set("X-Request-ID", trace.RequestID.String())
 
-		next.ServeHTTP(w, r) 
+		next.ServeHTTP(w, r)
 	}
 }
 
@@ -59,7 +59,7 @@ func Log(next http.Handler) http.HandlerFunc {
 }
 
 func PermissiveCORSHandler(next http.HandlerFunc) http.HandlerFunc {
-	return func (w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Access-Control-Allow-Origin", "*")
 		w.Header().Add("Access-Control-Allow-Credentials", "true")
 		w.Header().Add("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
@@ -75,8 +75,8 @@ func PermissiveCORSHandler(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func RecordResponse(next http.Handler) http.HandlerFunc {
-	return func (w http.ResponseWriter, r *http.Request) {
-		rrw := &RecordingResponseWriter{ ResponseWriter: w }
+	return func(w http.ResponseWriter, r *http.Request) {
+		rrw := &RecordingResponseWriter{ResponseWriter: w}
 		start := time.Now()
 
 		next.ServeHTTP(rrw, r)
@@ -93,7 +93,7 @@ func RecordResponse(next http.Handler) http.HandlerFunc {
 }
 
 func Recovery(next http.Handler) http.HandlerFunc {
-	return func (w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
 				stack := debug.Stack()

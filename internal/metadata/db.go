@@ -6,15 +6,15 @@ import (
 	_ "embed"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"snitch/snitchbe/internal/dbconfig"
 	"snitch/snitchbe/internal/libsqladmin"
-	metadataSQL "snitch/snitchbe/internal/metadata/sql"
 	"snitch/snitchbe/internal/metadata/sqlc"
-
 	"snitch/snitchbe/pkg/ctxutil"
 
 	"github.com/google/uuid"
-	"github.com/tursodatabase/libsql-client-go/libsql"
+	"github.com/tursodatabase/go-libsql"
+	_ "github.com/tursodatabase/go-libsql"
 )
 
 func NewMetadataDB(ctx context.Context, token string, config dbconfig.LibSQLConfig) (*sql.DB, error) {
@@ -36,28 +36,52 @@ func NewMetadataDB(ctx context.Context, token string, config dbconfig.LibSQLConf
 		}
 	}
 
-	httpURL, err := config.HttpURL()
+	metadataURL, err := config.MetadataDB()
 	if err != nil {
-		return nil, fmt.Errorf("get http url: %w", err)
+		return nil, fmt.Errorf("Cant get metadata: %w", err)
 	}
 
-	connector, err := libsql.NewConnector(
-		fmt.Sprintf("http://%s.%s", "metadata", "db"),
-		libsql.WithProxy(httpURL.String()),
-		libsql.WithAuthToken(token),
-	)
+	dbPath := filepath.Join("/localdb", "local.metadata.db")
+
+	conn, err := libsql.NewEmbeddedReplicaConnector(dbPath, metadataURL.String(), libsql.WithAuthToken(token))
 	if err != nil {
-		slogger.ErrorContext(ctx, "Failed creating metadata connector", "Error", err)
-		return nil, fmt.Errorf("couldnt create connector: %w", err)
+		slogger.ErrorContext(ctx, "Error opening DB", "Error", err)
+		return nil, fmt.Errorf("couldnt open db: %w", err)
 	}
 
-	db := sql.OpenDB(connector)
-	if _, err := db.ExecContext(ctx, metadataSQL.MetadataSchema); err != nil {
-		defer db.Close()
-		slogger.ErrorContext(ctx, "Failed creating metadata database", "Error", err)
-		return nil, fmt.Errorf("couldnt create database: %w", err)
+	db := sql.OpenDB(conn)
+
+	tx, err := db.BeginTx(ctx, nil)
+
+	if err != nil {
+		slogger.ErrorContext(ctx, "Failed starting transaction", "Error", err)
+		return nil, fmt.Errorf("couldnt start transaction: %w", err)
 	}
 
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			slogger.ErrorContext(ctx, "Failed to rollback transaction", "Error", err)
+		}
+	}()
+
+	queries := sqlc.New(tx)
+
+	qtx := queries.WithTx(tx)
+
+	if err := qtx.CreateGroupTable(ctx); err != nil {
+		slogger.ErrorContext(ctx, "Failed creating group table", "Error", err)
+		return nil, fmt.Errorf("couldnt create group table: %w", err)
+	}
+
+	if err := qtx.CreateServerTable(ctx); err != nil {
+		slogger.ErrorContext(ctx, "Failed creating server table", "Error", err)
+		return nil, fmt.Errorf("couldnt create server table: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		slogger.ErrorContext(ctx, "Failed to commit transaction", "Error", err)
+		return nil, fmt.Errorf("couldnt commit transaction: %w", err)
+	}
 	return db, nil
 }
 
@@ -70,6 +94,7 @@ func FindGroupIDByServerID(ctx context.Context, db *sql.DB, serverID int) (uuid.
 	var groupID uuid.UUID
 	queries := sqlc.New(db)
 	groupID, err := queries.FindGroupIDByServerID(ctx, serverID)
+
 	if err != nil {
 		slogger.ErrorContext(ctx, "Failed finding group id", "Error", err)
 		return uuid.Nil, fmt.Errorf("couldnt find group id: %w", err)

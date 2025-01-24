@@ -10,6 +10,8 @@ import (
 	"snitch/snitchbe/internal/handler"
 	"snitch/snitchbe/internal/jwt"
 	"testing"
+
+	_ "github.com/tursodatabase/go-libsql"
 )
 
 func TestCreateRegistrationHandler(t *testing.T) {

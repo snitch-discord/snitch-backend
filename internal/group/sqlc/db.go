@@ -33,6 +33,15 @@ func Prepare(ctx context.Context, db DBTX) (*Queries, error) {
 	if q.createReportStmt, err = db.PrepareContext(ctx, createReport); err != nil {
 		return nil, fmt.Errorf("error preparing query CreateReport: %w", err)
 	}
+	if q.createReportTableStmt, err = db.PrepareContext(ctx, createReportTable); err != nil {
+		return nil, fmt.Errorf("error preparing query CreateReportTable: %w", err)
+	}
+	if q.createServerTableStmt, err = db.PrepareContext(ctx, createServerTable); err != nil {
+		return nil, fmt.Errorf("error preparing query CreateServerTable: %w", err)
+	}
+	if q.createUserTableStmt, err = db.PrepareContext(ctx, createUserTable); err != nil {
+		return nil, fmt.Errorf("error preparing query CreateUserTable: %w", err)
+	}
 	if q.getAllReportsStmt, err = db.PrepareContext(ctx, getAllReports); err != nil {
 		return nil, fmt.Errorf("error preparing query GetAllReports: %w", err)
 	}
@@ -54,6 +63,21 @@ func (q *Queries) Close() error {
 	if q.createReportStmt != nil {
 		if cerr := q.createReportStmt.Close(); cerr != nil {
 			err = fmt.Errorf("error closing createReportStmt: %w", cerr)
+		}
+	}
+	if q.createReportTableStmt != nil {
+		if cerr := q.createReportTableStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing createReportTableStmt: %w", cerr)
+		}
+	}
+	if q.createServerTableStmt != nil {
+		if cerr := q.createServerTableStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing createServerTableStmt: %w", cerr)
+		}
+	}
+	if q.createUserTableStmt != nil {
+		if cerr := q.createUserTableStmt.Close(); cerr != nil {
+			err = fmt.Errorf("error closing createUserTableStmt: %w", cerr)
 		}
 	}
 	if q.getAllReportsStmt != nil {
@@ -98,21 +122,27 @@ func (q *Queries) queryRow(ctx context.Context, stmt *sql.Stmt, query string, ar
 }
 
 type Queries struct {
-	db                DBTX
-	tx                *sql.Tx
-	addServerStmt     *sql.Stmt
-	addUserStmt       *sql.Stmt
-	createReportStmt  *sql.Stmt
-	getAllReportsStmt *sql.Stmt
+	db                    DBTX
+	tx                    *sql.Tx
+	addServerStmt         *sql.Stmt
+	addUserStmt           *sql.Stmt
+	createReportStmt      *sql.Stmt
+	createReportTableStmt *sql.Stmt
+	createServerTableStmt *sql.Stmt
+	createUserTableStmt   *sql.Stmt
+	getAllReportsStmt     *sql.Stmt
 }
 
 func (q *Queries) WithTx(tx *sql.Tx) *Queries {
 	return &Queries{
-		db:                tx,
-		tx:                tx,
-		addServerStmt:     q.addServerStmt,
-		addUserStmt:       q.addUserStmt,
-		createReportStmt:  q.createReportStmt,
-		getAllReportsStmt: q.getAllReportsStmt,
+		db:                    tx,
+		tx:                    tx,
+		addServerStmt:         q.addServerStmt,
+		addUserStmt:           q.addUserStmt,
+		createReportStmt:      q.createReportStmt,
+		createReportTableStmt: q.createReportTableStmt,
+		createServerTableStmt: q.createServerTableStmt,
+		createUserTableStmt:   q.createUserTableStmt,
+		getAllReportsStmt:     q.getAllReportsStmt,
 	}
 }

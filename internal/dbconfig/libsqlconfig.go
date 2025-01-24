@@ -1,8 +1,6 @@
 package dbconfig
 
 import (
-	"crypto/ed25519"
-	"encoding/hex"
 	"fmt"
 	"net/url"
 	"os"
@@ -25,10 +23,10 @@ func LibSQLConfigFromEnv() (LibSQLConfig, error) {
 	}
 
 	cfg := LibSQLConfig{
-		Host: get("LIBSQL_HOST"),
-		Port: get("LIBSQL_PORT"),
+		Host:      get("LIBSQL_HOST"),
+		Port:      get("LIBSQL_PORT"),
 		AdminPort: get("LIBSQL_ADMIN_PORT"),
-		AuthKey: get("LIBSQL_AUTH_KEY"),
+		AuthKey:   get("LIBSQL_AUTH_KEY"),
 	}
 
 	if len(missing) > 0 {
@@ -39,14 +37,18 @@ func LibSQLConfigFromEnv() (LibSQLConfig, error) {
 	return cfg, nil
 }
 
-func (libSQLConfig LibSQLConfig) HttpURL() (*url.URL, error) {
-	return url.Parse(fmt.Sprintf("http://%s:%s", libSQLConfig.Host, libSQLConfig.Port))
+func (libSQLConfig LibSQLConfig) NamespaceURL(namespace string, token string) (*url.URL, error) {
+	return url.Parse(fmt.Sprintf("http://%s.%s:%s?authToken=%s", namespace, libSQLConfig.Host, libSQLConfig.Port, token))
+}
+
+func (libSQLConfig LibSQLConfig) MetadataDB() (*url.URL, error) {
+	return url.Parse(fmt.Sprintf("http://metadata.%s:%s", libSQLConfig.Host, libSQLConfig.Port))
 }
 
 func (libSQLConfig LibSQLConfig) AdminURL() (*url.URL, error) {
 	return url.Parse(fmt.Sprintf("http://%s:%s", libSQLConfig.Host, libSQLConfig.AdminPort))
 }
 
-func (libSQLConfig LibSQLConfig) DatabaseURL(key ed25519.PrivateKey) (*url.URL, error) {
-	return url.Parse(fmt.Sprintf("libsql://%s:%s?authToken=%s", libSQLConfig.Host, libSQLConfig.Port, hex.EncodeToString(key)))
+func (libSQLConfig LibSQLConfig) DatabaseURL(token string) (*url.URL, error) {
+	return url.Parse(fmt.Sprintf("http://%s:%s?authToken=%s", libSQLConfig.Host, libSQLConfig.Port, token))
 }

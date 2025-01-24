@@ -7,35 +7,29 @@ import (
 	"fmt"
 	"log/slog"
 	"snitch/snitchbe/internal/dbconfig"
-	"snitch/snitchbe/internal/jwt"
 
 	"snitch/snitchbe/pkg/ctxutil"
 
-	"github.com/tursodatabase/libsql-client-go/libsql"
+	_ "github.com/tursodatabase/go-libsql"
 )
 
-func NewGroupDB(ctx context.Context, tokenCache *jwt.TokenCache, config dbconfig.LibSQLConfig, groupID string) (*sql.DB, error) {
+func NewGroupDB(ctx context.Context, token string, config dbconfig.LibSQLConfig, groupID string) (*sql.DB, error) {
 	slogger, ok := ctxutil.Value[*slog.Logger](ctx)
 	if !ok {
 		slogger = slog.Default()
 	}
 
-	httpURL, err := config.HttpURL()
+	databaseURL, err := config.NamespaceURL(groupID, token)
 	if err != nil {
-		return nil, fmt.Errorf("get http url: %w", err)
+		slogger.ErrorContext(ctx, "Failed getting group DB URL", "Error", err)
+		return nil, fmt.Errorf("couldnt get group DB URL: %w", err)
 	}
 
-	connector, err := libsql.NewConnector(
-		fmt.Sprintf("http://%s.%s", groupID, "db"),
-		libsql.WithProxy(httpURL.String()),
-		libsql.WithAuthToken(tokenCache.Get()),
-	)
+	db, err := sql.Open("libsql", databaseURL.String())
 	if err != nil {
-		slogger.ErrorContext(ctx, "Failed creating group connector", "Error", err)
-		return nil, fmt.Errorf("couldnt create connector: %w", err)
+		slogger.ErrorContext(ctx, "Failed creating group DB", "Error", err)
+		return nil, fmt.Errorf("couldnt create group DB: %w", err)
 	}
-
-	db := sql.OpenDB(connector)
 
 	return db, nil
 }
