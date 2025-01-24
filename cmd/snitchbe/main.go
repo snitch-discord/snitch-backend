@@ -41,7 +41,7 @@ func main() {
 	jwtDuration := 10 * time.Minute
 	jwtCache := &jwt.TokenCache{}
 	jwt.StartGenerator(jwtDuration, jwtCache, key)
-	
+
 	dbJwt, err := jwt.CreateToken(key)
 	if err != nil {
 		panic(err)

@@ -88,6 +88,12 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, metadataDB *sql.DB, l
 			metadataQueries.WithTx(metadataTx)
 			var groupID uuid.UUID
 
+			previousGroupID, err := metadataQueries.FindGroupIDByServerID(r.Context(), serverID)
+			if err == nil {
+				http.Error(w, "Server is already registered to group: "+previousGroupID.String(), http.StatusConflict)
+				return
+			}
+
 			if registrationRequest.GroupID != "" {
 				// Join group flow
 				groupID, err = uuid.Parse(registrationRequest.GroupID)
@@ -295,4 +301,3 @@ func CreateRegistrationHandler(tokenCache *jwt.TokenCache, metadataDB *sql.DB, l
 		}
 	}
 }
-

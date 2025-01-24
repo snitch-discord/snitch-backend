@@ -4,12 +4,12 @@ import "net/http"
 
 type RecordingResponseWriter struct {
 	ResponseWriter http.ResponseWriter
-	StatusCode int
-	Bytes int
+	StatusCode     int
+	Bytes          int
 }
 
 func (w *RecordingResponseWriter) WriteHeader(statusCode int) {
-	if (w.StatusCode == 0) {
+	if w.StatusCode == 0 {
 		w.StatusCode = statusCode
 	}
 
@@ -25,6 +25,6 @@ func (w *RecordingResponseWriter) Write(b []byte) (int, error) {
 
 	n, err := w.ResponseWriter.Write(b)
 	w.Bytes += n
-	
+
 	return n, err
 }
