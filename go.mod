@@ -1,6 +1,6 @@
 module snitch/snitchbe
 
-go 1.23.4
+go 1.23.5
 
 require github.com/google/uuid v1.6.0
 
@@ -10,6 +10,6 @@ require github.com/libsql/sqlite-antlr4-parser v0.0.0-20240721121621-c0bdc870f11
 
 require (
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
-	github.com/tursodatabase/go-libsql v0.0.0-20241113154718-293fe7f21b08
-	golang.org/x/exp v0.0.0-20241215155358-4a5509556b9e // indirect
+	github.com/tursodatabase/go-libsql v0.0.0-20241221181756-6121e81fbf92
+	golang.org/x/exp v0.0.0-20250106191152-7588d65b2ba8 // indirect
 )
